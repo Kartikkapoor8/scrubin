@@ -559,8 +559,8 @@ async function boot(): Promise<void> {
       && procedure.step.id === 'standby' && quiet > attractAfter;
     attract.set(showAttract);
     scene.attract = showAttract;
-    if (!procedure.autoplay && procedure.step.id !== 'standby'
-      && quiet > (procedure.step.id === 'complete' ? resetAfterDone : resetAfterIdle)) {
+    const resetAfter = procedure.step.id === 'complete' ? resetAfterDone : resetAfterIdle;
+    if (!procedure.autoplay && procedure.step.id !== 'standby' && resetAfter > 0 && quiet > resetAfter) {
       resetNow();
     }
     attending.setLevel(brain.talking ? brain.mic.level : 0);

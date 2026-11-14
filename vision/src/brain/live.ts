@@ -58,6 +58,9 @@ export class AttendingBrain {
   private setupSeen = false;
   private failuresAtLevel = 0;
 
+  /** A test is feeding recorded speech: the real microphone's audio is dropped (see injectSpeech). */
+  private micMuted = false;
+
   // Push-to-talk.
   private gateOpen = false;
   /** The session was opened with Gemini's own voice detection off: we mark where each question starts and ends. */
@@ -195,6 +198,31 @@ export class AttendingBrain {
     }
   }
 
+  /**
+   * Audio only flows while a session is open and, with push-to-talk, while the talk button is down.
+   * Nothing is recorded or kept.
+   */
+  private sendSpeech(base64Pcm: string): void {
+    if (this.session && (this.talkMode === 'open' || this.gateOpen)) {
+      try { this.session.sendRealtimeInput({ audio: { data: base64Pcm, mimeType: 'audio/pcm;rate=16000' } }); } catch { /* socket closing */ }
+    }
+  }
+
+  /**
+   * For tests with no person at the microphone (dev/ask.mjs): recorded speech, 16 kHz 16-bit mono, goes
+   * down exactly the path the microphone's audio takes, gate included. The real microphone is left out
+   * meanwhile so the two do not mix; call with an empty string to hand it back.
+   */
+  injectSpeech(base64Pcm: string): void {
+    this.micMuted = base64Pcm !== '';
+    if (base64Pcm) this.sendSpeech(base64Pcm);
+  }
+
+  /** What a test needs to know about the session: is it up, and how much of the Live API it is using. */
+  get sessionInfo(): { connected: boolean; level: number; manualTurns: boolean; talkMode: string } {
+    return { connected: this.session !== null, level: this.compat, manualTurns: this.manualTurns, talkMode: this.talkMode };
+  }
+
   private setState(state: BrainState, detail = ''): void {
     this.state = state;
     this.detail = detail;
@@ -209,11 +237,7 @@ export class AttendingBrain {
     this.setState('connecting', 'Opening the microphone');
     try {
       await this.mic.start((chunk) => {
-        // Audio only flows while a session is open and, with push-to-talk, while the talk button is down.
-        // Nothing is recorded or kept.
-        if (this.session && (this.talkMode === 'open' || this.gateOpen)) {
-          try { this.session.sendRealtimeInput({ audio: { data: chunk, mimeType: 'audio/pcm;rate=16000' } }); } catch { /* socket closing */ }
-        }
+        if (!this.micMuted) this.sendSpeech(chunk);
       });
     } catch (err) {
       this.wanted = false;
