@@ -111,7 +111,7 @@ namespace ScrubIn
             string device = _ctx.IsHeadset
                 ? "HEADSET (" + XRSettings.loadedDeviceName + ")"
                 : "DESKTOP PREVIEW, no headset: right-drag orbits, scroll zooms";
-            GUILayout.Label("ScrubIn operator  |  " + device + "  |  " + Mathf.RoundToInt(1f / Mathf.Max(Time.smoothDeltaTime, 0.0001f)) + " fps", _text);
+            GUILayout.Label("VIPER operator  |  " + device + "  |  " + Mathf.RoundToInt(1f / Mathf.Max(Time.smoothDeltaTime, 0.0001f)) + " fps", _text);
 
             if (a.Locked)
             {

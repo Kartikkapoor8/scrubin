@@ -1,6 +1,20 @@
-# ScrubIn demo script
+# VIPER demo script
 
 Two things to deliver: a 90-second live demo and a demo video. Spoken lines are left blank for Kartik.
+
+## How the video gets recorded (until remoting is proven)
+
+The laptop runs Windows 11 26H2, where Holographic Remoting may not work. So the demo video is recorded from
+the **deployed UWP build running on the HoloLens**, not through remoting:
+
+1. `tools\ship.ps1` builds and installs the current code on the headset.
+2. Start VIPER from the HoloLens Start menu.
+3. `tools\record.ps1 start` begins a Mixed Reality Capture (holograms + camera + audio);
+   `tools\record.ps1 stop` ends it and downloads the clip to `tools\captures\`.
+4. `tools\spectate.ps1` shows the wearer's view live on the laptop for framing checks.
+
+Between deploys, review visuals in the Unity editor with no headset: press Play and the Game view shows the
+whole experience from a fixed camera at standing eye height, with every operator key working.
 
 ## Roles
 
@@ -49,16 +63,16 @@ Record more than you need; each shot at least twice.
 |---|------|-----|--------|-----------|
 | 1 | Wide establishing: table, patient's arm, wearer stepping in | Phone or camera on a tripod, landscape | Hook |  |
 | 2 | Close-up: the marker laceration on the bare arm, no holograms | Phone, macro-ish, steady | Hook |  |
-| 3 | POV: boot title and scan sweep | Mixed Reality Capture through Device Portal | Boot |  |
-| 4 | POV: patient card, vitals, wound measurement | Mixed Reality Capture | Assess |  |
-| 5 | POV: the X-ray reveal, slow push in toward the radial artery and the danger zone | Mixed Reality Capture, wearer leans in slowly | X-ray |  |
-| 6 | POV: suture plan appearing point by point | Mixed Reality Capture | Plan |  |
-| 7 | POV close-up: one full stitch (needle, thread, knot, green burst, feedback) | Mixed Reality Capture, head still, 0.5 m | Stitch (the money shot) |  |
+| 3 | POV: boot title and scan sweep | `tools\record.ps1` on the deployed build | Boot |  |
+| 4 | POV: patient card, vitals, wound measurement | `tools\record.ps1` | Assess |  |
+| 5 | POV: the X-ray reveal, slow push in toward the radial artery and the danger zone | `tools\record.ps1`, wearer leans in slowly | X-ray |  |
+| 6 | POV: suture plan appearing point by point | `tools\record.ps1` | Plan |  |
+| 7 | POV close-up: one full stitch (needle, thread, knot, green burst, feedback) | `tools\record.ps1`, head still, 0.5 m | Stitch (the money shot) |  |
 | 8 | Over-the-shoulder: wearer air-tapping above the arm | Phone behind the wearer's shoulder | Stitch |  |
-| 9 | POV: all five sutures done, score card | Mixed Reality Capture | Complete |  |
+| 9 | POV: all five sutures done, score card | `tools\record.ps1` | Complete |  |
 | 10 | Wide: wearer steps back, patient lifts the arm, smiles | Tripod | Close |  |
 | 11 | Screen: the operator view in Unity with the legend (optional, shows it is live) | Screen recording | Cutaway |  |
-| 12 | Fallback: the virtual patient mode on an empty table (optional) | Mixed Reality Capture | "No arm? No problem" beat |  |
+| 12 | Fallback: the virtual patient mode on an empty table (optional) | `tools\record.ps1` | "No arm? No problem" beat |  |
 
 Capture tips:
 - Mixed Reality Capture films through the HoloLens camera, which sits above the eyes, so holograms can look
@@ -75,4 +89,4 @@ Capture tips:
 2. Shots 3–6 in order (0:10–0:50).
 3. Shot 7, with shot 8 cut in (0:50–1:10).
 4. Shot 9 (1:10–1:22).
-5. Shot 10, end card: "ScrubIn · Built at UCSC DevFest 2026" (1:22–1:30).
+5. Shot 10, end card: "VIPER · Built at UCSC DevFest 2026" (1:22–1:30).

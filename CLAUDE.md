@@ -1,11 +1,22 @@
-# ScrubIn — shared brain for all three agents
+# VIPER — shared brain for every agent on this repo
 
-Read this whole file before writing code. Three people work on this repo with three agents; the rules below are
-what keep us from colliding. If you change a shared contract, change this file in the same commit.
+**VIPER** (Visual Instruction for Procedures & Emergency Repair) is the product's display name. The repo
+(`scrubin`), the folders (`Assets/ScrubIn/`), the namespace (`ScrubIn`), class names (`ScrubInBootstrap`, …)
+and the shader name (`ScrubIn/HoloGlow`) keep the old name on purpose, so nothing breaks. Do not rename them.
+
+Read this whole file before writing code. If you change a shared contract, change this file in the same commit.
+
+**Who does what (since Saturday afternoon):**
+- **Kartik's agent** (on a Mac with no Unity) writes all the Unity runtime code: Core, Visuals, Anatomy, Attending,
+  and `procedure.json`. It compile-checks against the Unity 2019.4 assemblies before every push.
+- **The Windows agent** (on the laptop with Unity and the HoloLens) owns `Assets/ScrubIn/Editor/` and `tools/`:
+  project settings, builds, deploys, recording, headset tests. It reports results; the Mac agent fixes forward.
+- One teammate is on the video and the site. Nobody else writes Unity code, but the folders and the
+  `IScrubInModule` hook stay as they are in case someone joins.
 
 ## Pitch
 
-ScrubIn is a HoloLens surgical suture trainer. Holograms are aligned onto a real forearm with a marker "laceration"
+VIPER is a HoloLens surgical suture trainer. Holograms are aligned onto a real forearm with a marker "laceration"
 on it, and the trainee is walked through a laceration repair: the field is scanned, the wound assessed, the anatomy
 under the skin revealed, five sutures planned and then placed one by one, and the result scored, with an attending
 surgeon card coaching every step. It is a hackathon build for UCSC DevFest 2026 (submissions close Sunday
@@ -14,12 +25,12 @@ scripted for one procedure. Fake whatever needs faking. It must look incredible 
 
 ## Demo flow (what the judge sees)
 
-A teammate rests a forearm palm-up on a table. The wearer stands over it. The procedure plays in steps:
+A teammate rests their **right** forearm palm-up on a table. The wearer stands over it. The procedure plays in steps:
 
 | # | Step id | What happens |
 |---|---------|--------------|
-| 1 | `boot` | Title "ScrubIn · Surgical Training" assembles above the table ("Simulated training · not medical guidance" under it). A horizontal scan plane sweeps down over the arm, tracing glowing contour lines along its outline. |
-| 2 | `assess` | Patient card ("Training Patient 01 · Laceration repair · L forearm"), vitals panel (animated ECG, HR 72, BP 118/76, SpO2 98%), dimension lines measuring the wound: "42 mm". |
+| 1 | `boot` | Title "VIPER" assembles above the table, with "Visual Instruction for Procedures & Emergency Repair" and "Simulated training · not medical guidance" under it. A horizontal scan plane sweeps down over the arm, tracing glowing contour lines along its outline. |
+| 2 | `assess` | Patient card ("Training Patient 01 · Laceration repair · R forearm"), vitals panel (animated ECG, HR 72, BP 118/76, SpO2 98%), dimension lines measuring the wound: "42 mm". |
 | 3 | `xray` | A scanline wipe reveals the anatomy: radial and ulnar arteries (red, flow pulses), superficial veins (blue), median nerve (yellow), flexor tendons (white), radius and ulna (faint). Labels with leader lines. A red danger zone pulses around the radial artery. |
 | 4 | `plan` | Five numbered suture points appear one by one along the wound. Each has entry and exit dots ~5 mm from the wound edge, a small arc for the needle path entering at 90°, and ~8 mm spacing ticks. |
 | 5 | `stitch` | The current target pulses. On trigger (air tap, or operator `S`): a curved needle runs the arc, thread follows, a knot pops, the point turns green with a burst, feedback appears ("Suture 3/5 · spacing 8 mm ✓ · depth ✓"). Repeat for all five. |
@@ -43,24 +54,47 @@ forearm on the table and runs the same procedure on it.
   additive, unlit). Prefer thin glowing lines, rims, points and outlines over bright filled areas; fills wash out
   the real arm and strain the eyes. Text is white or cyan, at least ~1 cm cap height at 0.7 m.
 - The arm is 0.6–0.8 m from the eyes. Camera near clip is 0.1 (the bootstrap sets it).
-- Budget: under ~150k triangles, 60 fps. Rendering happens on the PC during remoting.
+- **Performance budget: the HoloLens 1 renders everything itself.** The laptop runs Windows 11 26H2, where
+  Windows Mixed Reality was removed, so Holographic Remoting may not work; assume a deployed UWP build on the
+  headset's own GPU. That means:
+  - 60 fps on the headset. Visible triangles low: aim under ~60k.
+  - HL1 is fill-rate limited. No large overlapping transparent or additive areas: thin lines beat big glowing
+    fills, and cards are outlines and text, never filled panels.
+  - Unlit shaders only (`ScrubIn/HoloGlow` and TextMeshPro's). No post-processing, no real-time lights or shadows.
+  - Modest text and particle counts. Disable renderers that are hidden; no per-frame allocations.
+  - Settings (owned by the Windows agent): Linear color space, product and package name VIPER, 4x MSAA in the
+    editor quality level, no MSAA on the device quality level. Lines must look right without MSAA.
 - **Hand input is a bonus, never a dependency.** Air tap and hand position on HL1 are coarse. The keyboard
-  operator controls are the guaranteed demo path.
+  operator controls are the guaranteed path in the editor (and on the headset with a Bluetooth keyboard paired);
+  everything the demo needs must also be reachable by air tap alone.
 - **Never break the demo path. If something new is flaky, put it behind a toggle that defaults off.**
 
 ## Folder ownership
 
-Only write inside your own folder. Ask before touching someone else's.
+Only write inside your own folders. Ask before touching someone else's.
 
 | Folder | Owner | Contents |
 |--------|-------|----------|
-| `Assets/ScrubIn/Core/` | Kartik | `ScrubInBootstrap`, `ScrubInContext`, `IScrubInModule`, `ScrubInEvents`, `ProcedureData`, `PatientAlignment`, `OperatorInput`, `DesktopPreviewCamera`; later `ProcedureController`, `HoloInput` |
-| `Assets/ScrubIn/Visuals/` | Kartik | `Shaders/HoloGlow.shader`, `Palette`, `HoloMaterials`, `HoloElement`, `LineBuilder`, `TubeBuilder`, `LabelBuilder`, `ForearmShape`, `ArmOutline`; later `ScanSweep`, `SutureSystem`, `Hud`, `TitleSequence`, `ProceduralAudio` |
-| `Assets/ScrubIn/Editor/` | Kartik | `ScrubInProjectSetup` (menu **ScrubIn**) |
-| `Assets/ScrubIn/Anatomy/` | Teammate A | `ForearmAnatomy` (arteries, veins, nerve, tendons, bones, flow pulses, danger zone, labels), `VirtualArm` skin mesh |
-| `Assets/ScrubIn/Attending/` | Teammate B | `AttendingPanel` (typewriter text), `IAttending`, `ScriptedAttending`; later `GeminiAttending` |
-| `Assets/StreamingAssets/procedure.json` | SHARED | The step script. Text edits welcome from anyone; schema changes by agreement, additive only. |
-| `CLAUDE.md`, `docs/` | SHARED | Keep current. |
+| `Assets/ScrubIn/Core/` | Mac agent (Kartik) | `ScrubInBootstrap`, `ScrubInContext`, `IScrubInModule`, `ScrubInEvents`, `ProcedureData`, `PatientAlignment`, `OperatorInput`, `DesktopPreviewCamera`; `ProcedureController`, `HoloInput` |
+| `Assets/ScrubIn/Visuals/` | Mac agent (Kartik) | `Shaders/HoloGlow.shader`, `Palette`, `HoloMaterials`, `HoloElement`, `LineBuilder`, `TubeBuilder`, `LabelBuilder`, `ForearmShape`, `ArmOutline`; `SutureSystem`, `ProceduralAudio`; later `ScanSweep`, `Hud`, `TitleSequence` |
+| `Assets/ScrubIn/Anatomy/` | Mac agent (Kartik) | `ForearmAnatomy` (arteries, veins, nerve, tendons, bones, flow pulses, danger zone, labels), `VirtualArm` skin mesh |
+| `Assets/ScrubIn/Attending/` | Mac agent (Kartik) | `AttendingPanel` (typewriter text), `IAttending`, `ScriptedAttending`; later `GeminiAttending` |
+| `Assets/StreamingAssets/procedure.json` | Mac agent (Kartik) | The step script and every on-screen string. Text edits welcome from anyone; schema changes are additive only. |
+| `Assets/ScrubIn/Editor/` | **Windows agent** | `ScrubInProjectSetup.cs` (menu **ScrubIn**), `BuildScript.cs`. The Mac agent does not edit these; the Windows agent extends `ScrubInProjectSetup.cs` when the Mac agent asks (see "Requests for the Windows agent" below). |
+| `tools/` | **Windows agent** | Setup, build, deploy, record and checklist scripts. The Mac agent runs `tools/check-compile.sh` and `tools/gen_meta.py` but does not edit anything here. |
+| `ProjectSettings/`, `Packages/`, the scene, `Assets/TextMesh Pro/` | **Windows agent** | Pushed from the Windows machine. |
+| `CLAUDE.md`, `README.md`, `docs/` | SHARED | Keep current. |
+
+### Requests for the Windows agent
+
+Things the runtime code relies on that live in the Windows agent's files. Keep this list current.
+
+- `ScrubIn/HoloGlow` must be in Graphics ▸ Always Included Shaders (the runtime finds it with `Shader.Find`,
+  which only works in a device build if the shader is listed there). `ScrubInProjectSetup` already adds it.
+- The TextMeshPro essentials must be imported (`Assets/TextMesh Pro/`); without them every label is hidden.
+- UWP capabilities: SpatialPerception, Microphone, InternetClient.
+- Managed stripping: `Assets/ScrubIn/Core/link.xml` keeps all of `Assembly-CSharp` (modules are found by
+  reflection). Do not raise the stripping level in a way that overrides it.
 
 ## How your code gets run: `IScrubInModule`
 
@@ -114,9 +148,9 @@ Use `ForearmShape` (Visuals) instead of hard-coding the arm's shape. It is the s
 `HalfWidth(x)`, `HalfHeight(x)`, `CenterY(x)`, `SurfaceY(x, z)`, `Surface(x, z)`, `SurfaceNormal(x, z)`,
 `Below(x, z, depth)` (a point `depth` meters under the skin), `Ring(x, angleRad)`.
 
-**Left or right arm:** Unity's axes are left-handed, so this frame (X wrist to elbow, Y up, Z thumb) physically
-matches a **right** forearm lying palm-up. On a left forearm the thumb is on -Z. Open question for Kartik; until
-it is settled, build to the frame exactly as written.
+**It is a right forearm.** Unity's axes are left-handed, so this frame (X wrist to elbow, Y up, Z thumb)
+physically matches a right forearm lying palm-up, and the demo uses the patient's right arm. There is no mirror
+option.
 
 ## `ScrubInEvents` (shared contract)
 
@@ -146,7 +180,8 @@ defaults are used and the editor legend shows a warning.
 ```jsonc
 {
   "version": 1,
-  "title": "ScrubIn · Surgical Training",
+  "title": "VIPER",
+  "subtitle": "Visual Instruction for Procedures & Emergency Repair",
   "disclaimer": "Simulated training · not medical guidance",
   "patient":  { "name": "...", "procedure": "...", "site": "..." },
   "vitals":   { "hr": 72, "bp": "118/76", "spo2": 98 },
@@ -218,34 +253,34 @@ Without a headset, the editor runs a **desktop preview**: right-drag orbits, scr
 
 ## Running it
 
-First time on the Windows machine: see `docs/SETUP_WINDOWS.md` (copy the rig's settings with
-`tools\setup-from-rig.ps1`, open in Unity 2019.4, run **ScrubIn ▸ Switch Platform to UWP (HoloLens)** and
-**ScrubIn ▸ Setup Project** once).
+There are three ways to run, in order of how often they are used:
 
-Every time:
-1. On the HoloLens, start **Holographic Remoting Player** and note the IP it shows.
-2. Unity: **Window ▸ XR ▸ Holographic Emulation** ▸ Emulation Mode **Remote to Device** ▸ enter the IP ▸ **Connect**
-   (wait for the green "Connected").
-3. Press **Play** with the Game view focused (the keyboard controls need focus).
-4. Align the outline to the real arm, press `L` to lock, then `Space` to run the procedure.
+1. **Editor, no headset (the review loop).** Open the project in Unity 2019.4 and press Play. On-device deploys
+   are slow, so this is where visuals get reviewed between deploys: a fixed camera at standing eye height looks
+   down at the arm, every operator key works, and a thin frame shows what fits in the HoloLens field of view.
+   This must always work.
+2. **Deployed build on the HoloLens (the demo path).** `tools\ship.ps1` builds and installs it; see
+   `tools/DEMO_CHECKLIST.md`. The headset renders everything itself, so the performance budget above applies.
+3. **Holographic Remoting (optional, only if it works on the laptop).** `tools/REMOTING.md`.
 
-No headset: just press Play. You get the desktop preview with the same keys.
+First-time setup on the Windows machine is in `docs/SETUP_WINDOWS.md`.
 
 ## Working rules
 
 - Work in the build order in `README.md`. After each step: it compiles in Unity 2019.4, commit with a clear
-  message, push, and tell your human in 3 lines what to test. Don't go past a step that hasn't been confirmed on
-  the headset unless told to.
+  message, push, and tell your human in 3 lines what to test. Do not wait for headset confirmation between
+  steps (Kartik's call on Saturday): keep building, and fix forward as headset results come in.
 - If an API might not exist in 2019.4 or on HL1, say so and pick the safer path. Guard device-only APIs
   (`UnityEngine.XR.WSA.*`, `UnityEngine.Windows.Speech.*`) with `#if UNITY_WSA` (it is defined in the editor
   too once the platform is switched to UWP, which remoting needs anyway) and keep a keyboard path for whatever
   they do. The project must still compile with the platform set to Standalone.
 - Keep everything data-driven from `procedure.json`.
-- Git: `main` only, small commits, `git pull --rebase` before every push. **Always commit the `.meta` file with
+- Git: `main` only, small commits, **`git pull --rebase` before every push** (the Windows machine pushes
+  `ProjectSettings/`, the manifest, the scene and its own tools). **Always commit the `.meta` file with
   every new asset or folder** (mismatched GUIDs between machines are the usual way a Unity repo breaks). Never
   commit `Library/`, `Temp/`, `*.csproj`, `*.sln`, or `Assets/StreamingAssets/secrets.json`.
 - If you create files outside Unity (as an agent on a machine without Unity), run `python3 tools/gen_meta.py`
-  to create matching `.meta` files with stable GUIDs.
+  to create matching `.meta` files with stable GUIDs, and `tools/check-compile.sh` to type-check at C# 7.3.
 - Third-party assets: list each one with its license in `README.md`.
 
 ## Phase 2 — Gemini attending (not built yet; the seam only)
