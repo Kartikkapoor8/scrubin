@@ -59,6 +59,22 @@ thumb and index are together as if holding an instrument) gets a small reticle; 
 suture target it reads **Aligned**. Hand tracking is a bonus: the space bar or a clicker registers the stitch
 whether or not it is aligned.
 
+## The procedure
+
+| Step | What the audience sees |
+|------|------------------------|
+| Standing by | The wound is found and bracketed: "Wound locked". |
+| Scan | A scan line sweeps the picture; a second pass leaves contour arcs over the arm. |
+| Assess | The wound is measured: extension lines, a dimension line, "42 mm". |
+| Anatomy | (milestone 5) Arteries, veins, nerve and tendons laid along the arm; the danger zone. |
+| Plan | Five numbered targets with entry and exit points, the 8 mm spacing ruler, the 5 mm bite. The view zooms in. |
+| Stitch | One suture per press: the target tightens, a curved needle passes under the wound, the thread is pulled flat, the knot pops, the suture turns green with a burst and "Suture 3/5 · spacing 7.9 mm ✓ · depth ✓". The Attending comments on each. |
+| Complete | The view pulls back; the score card fills: sutures, average spacing, depth, time. |
+
+Wording, counts and timings live in `src/procedure/data.ts`. **Autoplay** (`A`) runs the whole thing hands-free
+for recording, and stops on the score card; `?autoplay=1` in the address starts it at launch. Sounds are
+synthesised in the page (`N` mutes them; `?sound=0`).
+
 ## Keys
 
 | Key | Action |

@@ -24,8 +24,9 @@ export class WoundLockLayer implements Layer {
 
     if (pose.locked && !this.wasLocked) this.lockedAt = t;
     this.wasLocked = pose.locked;
+    if (this.scene.relockAt > this.lockedAt) this.lockedAt = this.scene.relockAt;
 
-    const wanted = !hidden && pose.locked && (step === 'standby' || step === 'scan' || step === 'assess' || step === 'anatomy');
+    const wanted = !hidden && pose.locked && (step === 'standby' || step === 'scan');
     const presence = this.presence.update(wanted, t, dt) * pose.confidence;
     if (presence <= 0.003) return;
 

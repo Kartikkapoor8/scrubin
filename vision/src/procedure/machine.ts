@@ -15,8 +15,11 @@ export type ProcedureEvent =
   | { type: 'reset' }
   | { type: 'autoplay'; on: boolean };
 
-/** How long one stitch animation runs, in seconds. The stitch layer and the machine share this number. */
-export const STITCH_SECONDS = 2.6;
+/**
+ * How long one stitch takes, in seconds, from the trigger to the knot being tied. The stitch layer animates
+ * to this clock; the burst and the feedback play after it.
+ */
+export const STITCH_SECONDS = 2.15;
 
 /**
  * The procedure's state: which step is showing, how many sutures are in, whether autoplay is running.
@@ -31,9 +34,10 @@ export class Procedure {
   stitchesDone = 0;
   stitch: StitchRun | null = null;
   autoplay = false;
-  /** App time the first real step began, for the score card's clock. */
-  startedAt = 0;
-  finishedAt = 0;
+  /** App time the first real step began, for the score card's clock (-1 = not started). */
+  startedAt = -1;
+  /** App time the procedure was completed (-1 = still running). */
+  finishedAt = -1;
 
   private listeners: Listener[] = [];
   private now = 0;
@@ -49,8 +53,8 @@ export class Procedure {
 
   /** Seconds the procedure has been running (frozen once complete). */
   get elapsed(): number {
-    if (!this.startedAt) return 0;
-    return (this.finishedAt || this.now) - this.startedAt;
+    if (this.startedAt < 0) return 0;
+    return (this.finishedAt >= 0 ? this.finishedAt : this.now) - this.startedAt;
   }
 
   on(listener: Listener): void {
@@ -71,7 +75,8 @@ export class Procedure {
       this.stitch = null;
       this.stitchesDone = Math.max(this.stitchesDone, index + 1);
       this.emit({ type: 'stitch-done', index });
-      if (this.autoplay) this.nextAutoAt = now + 0.9;
+      // Leave the last suture's feedback on screen a little longer before moving to the score.
+      if (this.autoplay) this.nextAutoAt = now + (this.stitchesDone >= this.count ? 2.8 : 1.0);
     }
     if (this.autoplay && now >= this.nextAutoAt) this.autoStep();
   }
@@ -118,10 +123,9 @@ export class Procedure {
 
     this.index = target;
     this.stepStartedAt = this.now;
-    if (this.step.id !== 'standby' && !this.startedAt) this.startedAt = this.now;
-    if (this.step.id === 'standby') { this.startedAt = 0; this.finishedAt = 0; }
-    if (this.step.id === 'complete') this.finishedAt = this.now;
-    else this.finishedAt = 0;
+    if (this.step.id !== 'standby' && this.startedAt < 0) this.startedAt = this.now;
+    if (this.step.id === 'standby') this.startedAt = -1;
+    this.finishedAt = this.step.id === 'complete' ? this.now : -1;
     this.nextAutoAt = this.now + this.step.duration;
     this.emit({ type: 'step', step: this.step, index: this.index, previous });
   }
@@ -142,8 +146,8 @@ export class Procedure {
   reset(): void {
     this.stitch = null;
     this.stitchesDone = 0;
-    this.startedAt = 0;
-    this.finishedAt = 0;
+    this.startedAt = -1;
+    this.finishedAt = -1;
     const previous = this.step.id;
     this.index = 0;
     this.stepStartedAt = this.now;

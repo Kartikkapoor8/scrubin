@@ -8,16 +8,23 @@ import { add, clamp, el } from './core/dom';
 import { Viewport } from './core/viewport';
 import { InputManager } from './input/manager';
 import type { SourceKind } from './input/types';
+import { Sounds } from './app/audio';
 import { DebugLayer } from './overlay/layers/debug';
 import { HandLayer } from './overlay/layers/hand';
+import { MeasureLayer } from './overlay/layers/measure';
 import { PlanLayer } from './overlay/layers/plan';
+import { ScanLayer } from './overlay/layers/scan';
+import { StitchLayer } from './overlay/layers/stitch';
 import { WoundLockLayer } from './overlay/layers/wound';
 import { OverlayRenderer } from './overlay/renderer';
-import type { StepId } from './procedure/data';
+import { PROCEDURE, type StepId } from './procedure/data';
 import { Procedure } from './procedure/machine';
 import { HandTracker } from './tracking/hands';
 import { loadMarker, MARKER_PRESETS, markerFromSample, saveMarker, WoundDetector, WoundTracker } from './tracking/wound';
+import { AttendingCard } from './ui/attending';
+import { FeedbackToast } from './ui/feedback';
 import { Hud } from './ui/hud';
+import { ScoreCard } from './ui/score';
 import { StepPanel } from './ui/steps';
 
 interface ServerConfig {
@@ -41,6 +48,7 @@ const KEYS: Array<[string, string]> = [
   ['R', 'Reset the procedure'],
   ['A', 'Autoplay (for recording)'],
   ['H', 'Hide every overlay (clean picture)'],
+  ['N', 'Sound on / off'],
   ['1 2 3 4', 'Input: HoloLens / webcam / video file / simulated arm'],
   ['K', 'Pick the marker colour: press K, then click the marker line'],
   ['M', 'Next marker colour preset (green, magenta, blue, orange)'],
@@ -92,14 +100,38 @@ async function boot(): Promise<void> {
     debug: params.get('debug') === '1',
     aligned: false,
     toolDistanceMm: -1,
+    relockAt: -1e9,
   };
 
+  renderer.add(new ScanLayer(scene));
   renderer.add(new WoundLockLayer(scene));
+  renderer.add(new MeasureLayer(scene));
   renderer.add(new PlanLayer(scene));
+  renderer.add(new StitchLayer(scene));
   renderer.add(new HandLayer(scene));
   renderer.add(new DebugLayer(scene));
 
   new StepPanel(hud.root, procedure);
+  new FeedbackToast(hud.root, procedure);
+  new ScoreCard(hud.root, procedure);
+  const attending = new AttendingCard(hud.root);
+  const sounds = new Sounds();
+  if (params.get('sound') === '0') sounds.muted = true;
+
+  procedure.on((event) => {
+    if (event.type === 'step') {
+      if (event.step.id === 'complete') sounds.complete();
+      else if (event.step.id !== 'standby') sounds.step();
+      if (event.step.id !== 'stitch') attending.hide();
+    }
+    if (event.type === 'stitch-start') sounds.stitchStart();
+    if (event.type === 'stitch-done') {
+      sounds.stitchDone(event.index);
+      const line = PROCEDURE.sutures.lines[event.index];
+      if (line) attending.say(line, { hold: 5 });
+    }
+    if (event.type === 'reset') attending.hide();
+  });
   const handChip = hud.addChip('Hands');
   const woundChip = hud.addChip('Wound');
   const autoChip = hud.addChip('Autoplay');
@@ -173,8 +205,10 @@ async function boot(): Promise<void> {
     saveSettings(settings);
   };
 
+  window.addEventListener('pointerdown', () => sounds.unlock());
   window.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
+    sounds.unlock();
     switch (event.key) {
       case ' ': case 'PageDown': procedure.advance(); break;
       case 'ArrowRight': procedure.next(); break;
@@ -186,6 +220,7 @@ async function boot(): Promise<void> {
         scene.hidden = !scene.hidden;
         hud.setHidden(scene.hidden);
         break;
+      case 'n': case 'N': sounds.muted = !sounds.muted; hud.notice(`Sound ${sounds.muted ? 'off' : 'on'}`, 1500); break;
       case '1': input.choose('hololens'); break;
       case '2': input.choose('webcam'); break;
       case '3': chooseFile(); break;
@@ -277,6 +312,7 @@ async function boot(): Promise<void> {
   let last = performance.now();
   const started = last;
   let zoomTarget = 1;
+  let wasLocked = false;
 
   const frame = (now: number) => {
     const dt = Math.min(0.1, (now - last) / 1000);
@@ -294,8 +330,11 @@ async function boot(): Promise<void> {
     const pose = tracker.pose;
     const step = procedure.step.id;
     view.setSize(stage.clientWidth, stage.clientHeight, video.videoWidth, video.videoHeight);
-    if (settings.autoZoom && !scene.hidden && pose.locked && (step === 'plan' || step === 'stitch')) {
-      const desired = clamp((stage.clientWidth * 0.24) / Math.max(1, pose.length * view.baseScale), 1, 2.2);
+    // How much of the screen's width the wound should fill in each step, and the most to zoom for it.
+    const framing: Partial<Record<StepId, [number, number]>> = { assess: [0.15, 1.6], plan: [0.24, 2.2], stitch: [0.24, 2.2] };
+    const frameFor = framing[step];
+    if (settings.autoZoom && !scene.hidden && pose.locked && frameFor) {
+      const desired = clamp((stage.clientWidth * frameFor[0]) / Math.max(1, pose.length * view.baseScale), 1, frameFor[1]);
       if (Math.abs(desired - zoomTarget) > 0.12 || zoomTarget === 1) zoomTarget = desired;
       view.focusOn(zoomTarget, pose.cx, pose.cy);
     } else {
@@ -320,6 +359,9 @@ async function boot(): Promise<void> {
 
     renderer.resize(stage.clientWidth, stage.clientHeight);
     renderer.draw(t, dt, view);
+
+    if (pose.locked && !wasLocked && step === 'standby') sounds.lock();
+    wasLocked = pose.locked;
 
     // Status chips.
     if (pose.locked) woundChip.set('Wound locked', 'ok');

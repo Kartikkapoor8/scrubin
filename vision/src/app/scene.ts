@@ -43,6 +43,8 @@ export interface Scene {
   aligned: boolean;
   /** Distance from the working fingertip to the current target in millimetres, or -1 when there is none. */
   toolDistanceMm: number;
+  /** App time at which the wound-lock brackets should snap in again (set by the scan as it passes the wound). */
+  relockAt: number;
 }
 
 /**
