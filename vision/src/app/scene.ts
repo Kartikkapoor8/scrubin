@@ -11,12 +11,14 @@ export interface Settings {
   flipSide: boolean;
   /** Zoom toward the wound while planning and stitching. */
   autoZoom: boolean;
+  /** Track ink only: ignore anything that glows like a hologram. Off only when the "wound" is itself a hologram. */
+  inkOnly: boolean;
 }
 
 const SETTINGS_KEY = 'viper.settings.v1';
 
 export function loadSettings(): Settings {
-  const defaults: Settings = { acrossScale: 1, flipAlong: false, flipSide: false, autoZoom: true };
+  const defaults: Settings = { acrossScale: 1, flipAlong: false, flipSide: false, autoZoom: true, inkOnly: true };
   try {
     return { ...defaults, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
   } catch {

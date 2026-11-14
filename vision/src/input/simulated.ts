@@ -26,6 +26,13 @@ export class SimulatedSource implements InputSource {
   markerColor = 'rgb(46, 214, 92)';
   /** Draw the cyan hologram cage the HoloLens app leaves on the arm, as it would appear in the real stream. */
   showHologram = true;
+  /**
+   * Worst case for the tracker (?sim=body): a glowing holographic body over the table, drawn in cyan, mint
+   * and, deliberately, in the marker's own green, including a stroke the same length as the wound.
+   */
+  showBody = new URLSearchParams(location.search).get('sim') === 'body';
+  /** Hide the marker line (?marker=0): with the holograms on, the tracker must then find nothing at all. */
+  showMarker = new URLSearchParams(location.search).get('marker') !== '0';
 
   constructor() {
     this.canvas.width = SimulatedSource.WIDTH;
@@ -205,13 +212,17 @@ export class SimulatedSource implements InputSource {
       }
       ctx.stroke();
     };
-    ctx.strokeStyle = 'rgba(20, 90, 40, 0.35)';
-    ctx.lineWidth = 7.5;
-    strokeWound();
-    ctx.strokeStyle = this.markerColor;
-    ctx.lineWidth = 4.6;
-    strokeWound();
+    if (this.showMarker) {
+      ctx.strokeStyle = 'rgba(20, 90, 40, 0.35)';
+      ctx.lineWidth = 7.5;
+      strokeWound();
+      ctx.strokeStyle = this.markerColor;
+      ctx.lineWidth = 4.6;
+      strokeWound();
+    }
     ctx.restore();
+
+    const armTransform = ctx.getTransform();
 
     // What the HoloLens app adds to the picture once its outline is placed: a quiet cyan cage on the arm.
     if (this.showHologram) {
@@ -260,6 +271,38 @@ export class SimulatedSource implements InputSource {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
+
+    // Holograms are added by the headset on top of the camera picture, so they are not dimmed by the lens.
+    ctx.setTransform(armTransform);
+    if (this.showBody) {
+      // Light added on top of the picture, the way the headset's capture shows holograms.
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
+      const glowLine = (color: string, width: number, points: number[]) => {
+        ctx.strokeStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.moveTo(points[0], points[1]);
+        for (let i = 2; i < points.length; i += 2) ctx.lineTo(points[i], points[i + 1]);
+        ctx.stroke();
+      };
+      const sway = Math.sin(t * 0.6) * 6;
+      // A torso and an upper arm in outline, above and around the real arm.
+      glowLine('rgba(63, 224, 255, 0.9)', 3, [x0 - 240, -250 + sway, x0 + 120, -300 + sway, x1 + 200, -260 + sway]);
+      glowLine('rgba(63, 224, 255, 0.9)', 3, [x0 - 200, 250, x0 + 200, 280, x1 + 220, 250]);
+      glowLine('rgba(77, 255, 176, 0.95)', 3, [x0 + 60, -190 + sway, x0 + 300, -210 + sway, x1 - 60, -180 + sway]);
+      glowLine('rgba(77, 255, 176, 0.95)', 3, [x1 - 40, -170, x1 + 120, -60, x1 + 150, 90]);
+      // The hard ones: the marker's own green, as light. One over the drape, one across the skin, and one the
+      // length of the wound lying right next to it.
+      glowLine('rgba(60, 255, 40, 0.95)', 4, [x0 + 40, 200, x0 + 150, 196]);
+      glowLine('rgba(60, 255, 40, 0.95)', 4, [-half, 34, half, 30]);
+      glowLine('rgba(60, 255, 40, 0.95)', 4, [x0 - 160, -200 + sway, x0 - 50, -214 + sway]);
+      ctx.restore();
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 }
 

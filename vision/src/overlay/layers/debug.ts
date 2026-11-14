@@ -49,6 +49,8 @@ export class DebugLayer implements Layer {
     const lines = [
       `marker  hue ${marker.hue}° ±${marker.hueTolerance}  sat>${marker.minSaturation.toFixed(2)}  val>${marker.minValue.toFixed(2)}`,
       `mask ${detector.lastMaskCount} px   analysis ${detector.lastMs.toFixed(1)} ms @ ${detector.analysisWidth}px`,
+      `blobs ${detector.lastReport.blobs}   not a line ${detector.lastReport.notLine}   glowing (hologram) ${detector.lastReport.glowing}`
+        + `   chosen: hue ${detector.lastReport.hue}° sat ${detector.lastReport.saturation.toFixed(2)} val ${detector.lastReport.value.toFixed(2)} vs skin x${detector.lastReport.contrast.toFixed(2)}`,
       `wound  ${pose.locked ? 'LOCKED' : 'searching'}  conf ${pose.confidence.toFixed(2)}  ${pose.length.toFixed(0)} px  ${pose.pxPerMm.toFixed(2)} px/mm  stale ${pose.staleFor.toFixed(1)}s`,
       `hands  ${hands.state}  ${hands.hands.length} seen  ${hands.lastMs.toFixed(1)} ms`,
       `zoom ${view.zoom.toFixed(2)}  across ${settings.acrossScale.toFixed(2)}  flip ${settings.flipAlong ? 'along ' : ''}${settings.flipSide ? 'side' : ''}`,

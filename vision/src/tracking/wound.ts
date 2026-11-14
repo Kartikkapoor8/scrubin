@@ -16,10 +16,12 @@ export interface MarkerSettings {
 }
 
 export const MARKER_PRESETS: Record<string, MarkerSettings> = {
-  green: { hue: 128, hueTolerance: 34, minSaturation: 0.42, minValue: 0.3, lengthMm: 42 },
-  magenta: { hue: 318, hueTolerance: 26, minSaturation: 0.42, minValue: 0.3, lengthMm: 42 },
-  blue: { hue: 222, hueTolerance: 26, minSaturation: 0.45, minValue: 0.25, lengthMm: 42 },
-  orange: { hue: 24, hueTolerance: 14, minSaturation: 0.62, minValue: 0.45, lengthMm: 42 },
+  // Narrow on purpose: the picture also contains holograms (cyan, mint green, white) and whatever is on the
+  // table. Only the marker's own green may pass. Pick the real marker with K to centre this on it.
+  green: { hue: 126, hueTolerance: 20, minSaturation: 0.45, minValue: 0.28, lengthMm: 42 },
+  magenta: { hue: 318, hueTolerance: 20, minSaturation: 0.45, minValue: 0.3, lengthMm: 42 },
+  blue: { hue: 222, hueTolerance: 18, minSaturation: 0.5, minValue: 0.25, lengthMm: 42 },
+  orange: { hue: 24, hueTolerance: 12, minSaturation: 0.62, minValue: 0.45, lengthMm: 42 },
 };
 
 const STORAGE_KEY = 'viper.marker.v1';
@@ -58,8 +60,20 @@ export class WoundDetector {
   analysisWidth = 960;
   /** Milliseconds the last analysis took (shown in the debug view). */
   lastMs = 0;
+  /**
+   * Turn down candidates that glow: brighter than what is beside them by more than `glowContrast`, with a
+   * core at full brightness. That is a hologram line, never marker ink.
+   */
+  rejectGlow = true;
+  glowContrast = 1.25;
   /** Number of marker-coloured pixels in the last frame (debug view). */
   lastMaskCount = 0;
+  /**
+   * Why the last frame's candidates were turned down, and what the accepted one looked like (debug view):
+   * how many blobs were not line-like, how many glowed like a hologram, and the winner's colour and how
+   * bright it is compared with the skin beside it.
+   */
+  lastReport = { blobs: 0, notLine: 0, glowing: 0, hue: 0, saturation: 0, value: 0, contrast: 0 };
 
   private canvas = document.createElement('canvas');
   private ctx = this.canvas.getContext('2d', { willReadFrequently: true, alpha: false })!;
@@ -159,7 +173,14 @@ export class WoundDetector {
     const maxPixels = Math.round(mask.length * 0.012);
     const maxThickness = h * 0.035;
     const stack = this.stack;
-    let best: { score: number; n: number; mx: number; my: number; angle: number; l1: number; l2: number; start: number; end: number } | null = null;
+    interface Candidate {
+      score: number; n: number; mx: number; my: number; angle: number; l1: number; l2: number;
+      start: number; end: number; r: number; g: number; b: number;
+      /** Share of the blob's pixels that are at (or nearly at) full brightness: the core of a light source. */
+      hot: number;
+    }
+    const candidates: Candidate[] = [];
+    const report = { blobs: 0, notLine: 0, glowing: 0, hue: 0, saturation: 0, value: 0, contrast: 0 };
     let cursor = 0; // blobs' pixel indices are kept back to back in `stack`
 
     for (let seed = 0; seed < mask.length; seed++) {
@@ -168,12 +189,17 @@ export class WoundDetector {
       let end = cursor;
       stack[end++] = seed;
       mask[seed] = 3; // visited
-      let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+      let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, sr = 0, sg = 0, sb = 0, hot = 0;
       for (let read = start; read < end; read++) {
         const p = stack[read];
         const x = p % w;
         const y = (p - x) / w;
         n++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
+        const pr = data[p * 4];
+        const pg = data[p * 4 + 1];
+        const pb = data[p * 4 + 2];
+        sr += pr; sg += pg; sb += pb;
+        if (pr >= 232 || pg >= 232 || pb >= 232) hot++;
         // 8-connected, and bridging one-pixel gaps so a hologram line crossing the marker does not split it
         for (let oy = -2; oy <= 2; oy++) {
           const yy = y + oy;
@@ -188,8 +214,9 @@ export class WoundDetector {
       }
       cursor = end;
       if (n < minPixels) continue;
+      report.blobs++;
       // A drawn line is a small thing. A big patch of the marker's colour (a drape, a sleeve) is not it.
-      if (n > maxPixels) continue;
+      if (n > maxPixels) { report.notLine++; continue; }
 
       const mx = sx / n;
       const my = sy / n;
@@ -200,8 +227,14 @@ export class WoundDetector {
       const l1 = (cxx + cyy) / 2 + spread; // variance along the blob
       const l2 = Math.max(1e-3, (cxx + cyy) / 2 - spread); // variance across it
       const elongation = Math.sqrt(l1 / l2);
-      if (elongation < 2.2) continue; // not a line
-      if (Math.sqrt(12 * l2) > maxThickness) continue; // far too thick to be a marker stroke
+      const thick = Math.sqrt(12 * l2);
+      const long = Math.sqrt(12 * l1);
+      // A marker stroke: long and thin, solid (not a sparse scatter or an outline), of a plausible size.
+      const solid = n / Math.max(1, long * thick);
+      if (elongation < 4.5 || thick > maxThickness || long < w * 0.022 || long > w * 0.4 || solid < 0.45) {
+        report.notLine++;
+        continue;
+      }
 
       let score = n * Math.min(elongation, 12);
       if (near) {
@@ -209,10 +242,50 @@ export class WoundDetector {
         const sigma = w * 0.09;
         score *= 1 + 3 * Math.exp(-dist2 / (2 * sigma * sigma));
       }
-      if (!best || score > best.score) {
-        best = { score, n, mx, my, angle: 0.5 * Math.atan2(2 * cxy, cxx - cyy), l1, l2, start, end };
-      }
+      candidates.push({
+        score, n, mx, my, angle: 0.5 * Math.atan2(2 * cxy, cxx - cyy), l1, l2, start, end,
+        r: sr / n, g: sg / n, b: sb / n, hot: hot / n,
+      });
     }
+
+    // Best candidate first; the first one that is ink rather than light wins.
+    candidates.sort((p, q) => q.score - p.score);
+    let best: Candidate | null = null;
+    for (const candidate of candidates.slice(0, 6)) {
+      // Ink absorbs light, a hologram adds it. A hologram line has a core at full brightness and stands
+      // well above whatever is beside it; marker ink does not do both, on any skin tone, unless the camera
+      // is badly overexposed. Both must be true to turn a candidate down.
+      const dx = Math.cos(candidate.angle);
+      const dy = Math.sin(candidate.angle);
+      const half = Math.sqrt(12 * candidate.l1) / 2;
+      const off = Math.sqrt(12 * candidate.l2) / 2 + Math.max(4, w * 0.006);
+      let ring = 0;
+      let ringCount = 0;
+      for (let i = -6; i <= 6; i++) {
+        for (const side of [-1, 1]) {
+          const x = Math.round(candidate.mx + dx * ((i / 6) * half) - dy * off * side);
+          const y = Math.round(candidate.my + dy * ((i / 6) * half) + dx * off * side);
+          if (x < 0 || y < 0 || x >= w || y >= h) continue;
+          const q = (y * w + x) * 4;
+          ring += 0.2126 * data[q] + 0.7152 * data[q + 1] + 0.0722 * data[q + 2];
+          ringCount++;
+        }
+      }
+      const blobLuma = 0.2126 * candidate.r + 0.7152 * candidate.g + 0.0722 * candidate.b;
+      const contrast = ringCount > 0 ? blobLuma / Math.max(1, ring / ringCount) : 1;
+      const hsv = rgbToHsv(candidate.r, candidate.g, candidate.b);
+      if (this.rejectGlow && contrast > this.glowContrast && candidate.hot > 0.08) {
+        report.glowing++;
+        continue;
+      }
+      best = candidate;
+      report.hue = Math.round(hsv.h);
+      report.saturation = hsv.s;
+      report.value = hsv.v;
+      report.contrast = contrast;
+      break;
+    }
+    this.lastReport = report;
 
     if (!best) {
       this.finish(started);
@@ -236,7 +309,7 @@ export class WoundDetector {
     const length = hi - lo + 1;
     const thickness = Math.max(1, Math.sqrt(12 * best.l2));
     const elongation = Math.sqrt(best.l1 / best.l2);
-    const quality = clamp((elongation - 2.2) / 5, 0, 1) * clamp(best.n / (minPixels * 3), 0, 1);
+    const quality = clamp((elongation - 4.5) / 5, 0, 1) * clamp(best.n / (minPixels * 3), 0, 1);
 
     this.finish(started);
     return {
@@ -393,8 +466,8 @@ export function rgbToHsv(r: number, g: number, b: number): { h: number; s: numbe
 export function markerFromSample(sample: { h: number; s: number; v: number }, lengthMm: number): MarkerSettings {
   return {
     hue: Math.round(sample.h),
-    hueTolerance: 24,
-    minSaturation: clamp(sample.s * 0.55, 0.22, 0.7),
+    hueTolerance: 18,
+    minSaturation: clamp(sample.s * 0.6, 0.25, 0.7),
     minValue: clamp(sample.v * 0.45, 0.15, 0.6),
     lengthMm,
   };

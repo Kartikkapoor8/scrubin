@@ -68,6 +68,7 @@ const KEYS: Array<[string, string]> = [
   ['C', 'Record the raw HoloLens stream to vision/media (C again stops; Shift+C records 60 s)'],
   ['K', 'Pick the marker colour: press K, then click the marker line'],
   ['M', 'Next marker colour preset (green, magenta, blue, orange)'],
+  ['J', 'Ink only (default) / also track a glowing hologram line as the wound'],
   ['X  Z', 'Flip which end is suture 1 / which side is the far side'],
   ['[  ]', 'Squash or stretch overlays across the arm (camera angle)'],
   ['T', 'Zoom toward the wound while planning and stitching: on / off'],
@@ -107,6 +108,7 @@ async function boot(): Promise<void> {
   const settings = loadSettings();
   tracker.flipAlong = settings.flipAlong;
   tracker.flipSide = settings.flipSide;
+  detector.rejectGlow = settings.inkOnly;
 
   const scene: Scene = {
     procedure, detector, tracker, hands,
@@ -421,6 +423,13 @@ async function boot(): Promise<void> {
         hud.notice(`Marker colour: ${presets[preset]}`);
         break;
       }
+      case 'j': case 'J':
+        settings.inkOnly = !settings.inkOnly;
+        detector.rejectGlow = settings.inkOnly;
+        storeSettings();
+        tracker.reset();
+        hud.notice(settings.inkOnly ? 'Tracking marker ink only (holograms ignored)' : 'Tracking glowing lines too (for a hologram wound)', 3000);
+        break;
       case 'x': case 'X': settings.flipAlong = !settings.flipAlong; storeSettings(); break;
       case 'z': case 'Z': settings.flipSide = !settings.flipSide; storeSettings(); break;
       case '[': settings.acrossScale = clamp(settings.acrossScale - 0.05, 0.4, 1.3); storeSettings(); hud.notice(`Across the arm: ${Math.round(settings.acrossScale * 100)}%`, 1500); break;
