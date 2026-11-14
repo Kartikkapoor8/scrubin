@@ -73,7 +73,7 @@ export class MeasureLayer implements Layer {
       glow(ctx, polyline(points), C.cyan, { width: 1.1, alpha: presence * 0.9, bloom: 0.5, reveal: tag, length });
       dot(ctx, ax, ay, 2.2, C.cyan, presence * tag);
       const labelAlpha = presence * p(1.5, 0.5);
-      const size = clamp(2.4 * px, 11, 15);
+      const size = clamp(2.6 * px, 14, 17);
       text(ctx, PROCEDURE.wound.label.toUpperCase(), cx + 8, cy - size * 0.1, {
         size, color: C.cyan, alpha: labelAlpha, align: 'left', weight: 700, tracking: 0.2,
       });

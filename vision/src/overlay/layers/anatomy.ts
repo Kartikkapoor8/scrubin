@@ -1,7 +1,7 @@
 import type { Scene } from '../../app/scene';
 import { Appear } from '../../app/scene';
 import { clamp, damp, ease, progress } from '../../core/dom';
-import { C, css, dot, glow, polyline, text, type RGB } from '../draw';
+import { C, css, dot, glow, monoWidth, polyline, text, textHeight, type RGB } from '../draw';
 import type { Frame, Layer } from '../renderer';
 import { WoundSpace } from '../space';
 
@@ -37,7 +37,7 @@ const STRUCTURES: Structure[] = [
   {
     id: 'flexor_tendons', label: 'Flexor tendons', color: C.white, width: 1.1, fadeOut: true,
     paths: [-12.5, -5, 3.5, 10.5].map((c): Point[] => [[WRIST, c], [-92, c * 0.94], [-62, c * 0.84], [-34, c * 0.74]]),
-    anchor: [-96, -4.8], labelAt: [-103, -50],
+    anchor: [-96, -4.8], labelAt: [-112, -47],
   },
   {
     id: 'veins', label: 'Superficial veins', color: C.blue, width: 1.6,
@@ -51,12 +51,12 @@ const STRUCTURES: Structure[] = [
   {
     id: 'median_nerve', label: 'Median nerve', color: C.yellow, width: 1.5,
     paths: [[[WRIST, -1.2], [-62, -2.8], [0, -3.4], [62, -2.6], [ELBOW, -1]]],
-    anchor: [44, -3], labelAt: [34, -50],
+    anchor: [44, -3], labelAt: [58, -47],
   },
   {
     id: 'ulnar_artery', label: 'Ulnar artery', color: C.red, width: 2, flow: true,
     paths: [[[WRIST, -22], [-82, -21], [-42, -19.4], [0, -18.2], [50, -16], [100, -10.5], [ELBOW, -3.5]]],
-    anchor: [-48, -19.6], labelAt: [-40, -50],
+    anchor: [-48, -19.6], labelAt: [-26, -61],
   },
   {
     id: 'radial_artery', label: 'Radial artery', color: C.red, width: 2.2, flow: true,
@@ -120,6 +120,8 @@ export class AnatomyLayer implements Layer {
   private zone = new Appear(3, 4);
   private highlight = 0;
   private highlighted = '';
+  /** How far each label is currently pushed out from under a HUD panel (pixels), eased. */
+  private nudges: Array<[number, number]> = STRUCTURES.map(() => [0, 0]);
 
   constructor(private scene: Scene) {}
 
@@ -202,18 +204,21 @@ export class AnatomyLayer implements Layer {
         const side = structure.labelAt[1] > 0 ? 1 : -1;
         const nearAlong = structure.anchor[0] + 5;
         const nearAcross = structure.anchor[1] + side * 9.5;
-        const [lx, ly] = w.point(
+        const [lx0, ly0] = w.point(
           nearAlong + (structure.labelAt[0] - nearAlong) * full,
           nearAcross + (structure.labelAt[1] - nearAcross) * full,
         );
+        const size = clamp(2.6 * px, 14.5, 17) + boost * 2;
+        const name = structure.label.toUpperCase();
+        const [lx, ly] = this.clearOfPanels(s, lx0, ly0, monoWidth(name, size, 0.16) / 2, textHeight(size) * 0.8, frame);
         const points = [ax, ay, lx, ly];
         glow(ctx, polyline(points), structure.color, {
           width: 1, alpha: labelAlpha * 0.7, bloom: 0.3, reveal: labelIn, length: Math.hypot(lx - ax, ly - ay), halo: 0.4,
         });
         dot(ctx, ax, ay, 2 + boost, structure.color, labelAlpha);
         const above = structure.labelAt[1] > 0;
-        text(ctx, structure.label.toUpperCase(), lx, ly + (above ? -9 : 10), {
-          size: clamp(2.2 * px, 10.5, 14) + boost * 2, color: mine ? C.white : structure.color, alpha: labelAlpha, weight: 600, tracking: 0.16,
+        text(ctx, name, lx, ly + (above ? -9 : 10), {
+          size, color: mine ? C.white : structure.color, alpha: labelAlpha, weight: 600, tracking: 0.16,
         });
       }
     }
@@ -227,6 +232,44 @@ export class AnatomyLayer implements Layer {
         width: 1.5, alpha: this.highlight * conf * (1 - phase), bloom: 1.2, halo: 0.3,
       });
     }
+  }
+
+  /**
+   * Where a label should be drawn so that no HUD panel covers it: the wanted position, pushed the shortest
+   * way out of any panel it would sit under and kept on the screen. The push eases, so a label slides clear
+   * instead of jumping as the arm moves.
+   */
+  private clearOfPanels(index: number, x: number, y: number, halfWidth: number, halfHeight: number, frame: Frame): [number, number] {
+    const margin = 14;
+    let pushX = 0;
+    let pushY = 0;
+    for (const zone of this.scene.keepOut) {
+      const left = zone.x0 - margin - halfWidth;
+      const right = zone.x1 + margin + halfWidth;
+      const top = zone.y0 - margin - halfHeight;
+      const bottom = zone.y1 + margin + halfHeight;
+      const cx = x + pushX;
+      const cy = y + pushY;
+      if (cx <= left || cx >= right || cy <= top || cy >= bottom) continue;
+      // Out through the nearest side that keeps the label on the screen.
+      const options: Array<[number, number]> = [];
+      if (right + halfWidth < frame.width - 8) options.push([right - cx, 0]);
+      if (left - halfWidth > 8) options.push([left - cx, 0]);
+      if (bottom + halfHeight < frame.height - 8) options.push([0, bottom - cy]);
+      if (top - halfHeight > 8) options.push([0, top - cy]);
+      if (options.length === 0) continue;
+      options.sort((a, b) => Math.abs(a[0]) + Math.abs(a[1]) - (Math.abs(b[0]) + Math.abs(b[1])));
+      pushX += options[0][0];
+      pushY += options[0][1];
+    }
+    // Never off the edge of the picture either.
+    const edgeX = clamp(x + pushX, halfWidth + 10, Math.max(halfWidth + 10, frame.width - halfWidth - 10));
+    const edgeY = clamp(y + pushY, halfHeight + 10, Math.max(halfHeight + 10, frame.height - halfHeight - 10));
+    const nudge = this.nudges[index];
+    const k = damp(7, frame.dt);
+    nudge[0] += (edgeX - x - nudge[0]) * k;
+    nudge[1] += (edgeY - y - nudge[1]) * k;
+    return [x + nudge[0], y + nudge[1]];
   }
 
   private isPointedAt(id: string): boolean {
@@ -279,9 +322,9 @@ export class AnatomyLayer implements Layer {
 
     glow(ctx, path, C.red, { width: 1.5, alpha: alpha * pulse, bloom: 1.1, dash: detailed ? [] : [5, 5], halo: 0.35 });
 
-    const [tx, ty] = w.point(0, centre[Math.floor(centre.length / 2)][1] + halfWidth + 3.6);
+    const [tx, ty] = w.point(0, centre[Math.floor(centre.length / 2)][1] + halfWidth + 5.2);
     text(ctx, 'DANGER ZONE', tx, ty, {
-      size: clamp(2.2 * px, 10.5, 14), color: [255, 138, 148], alpha: alpha * (0.85 + 0.15 * pulse), weight: 700, tracking: 0.24,
+      size: clamp(2.6 * px, 14.5, 18), color: [255, 150, 158], alpha: alpha * (0.85 + 0.15 * pulse), weight: 700, tracking: 0.24,
     });
   }
 }

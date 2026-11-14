@@ -162,6 +162,16 @@ const FONTS = {
   body: '"Inter Variable", "Inter", system-ui, sans-serif',
 };
 
+/** Width in pixels that text() will give a piece of monospaced lettering (table-mode scaling included). */
+export function monoWidth(value: string, size: number, tracking = 0.06): number {
+  return value.length * (0.6 + tracking) * size * textScale;
+}
+
+/** Height in pixels of one line of lettering drawn by text(). */
+export function textHeight(size: number): number {
+  return size * textScale;
+}
+
 export interface TextOptions {
   size?: number;
   color?: RGB;

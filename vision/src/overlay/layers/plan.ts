@@ -106,7 +106,7 @@ export class PlanLayer implements Layer {
       }
       const labelAlpha = rulerOn * this.ruler.part(t, 1.5, 0.5);
       const [lx, ly] = w.point((first + sutureOffsetMm(1)) / 2, across - 3.6);
-      text(ctx, `${spacingMm} mm`, lx, ly, { size: clamp(2.3 * px, 10, 14), color: C.cyan, alpha: labelAlpha, weight: 600 });
+      text(ctx, `${spacingMm} mm`, lx, ly, { size: clamp(2.6 * px, 13, 17), color: C.cyan, alpha: labelAlpha, weight: 600 });
 
       // Bite: how far from the wound edge the needle goes in, shown once, beside the first suture.
       const biteAlong = first - 4.4;
@@ -120,7 +120,7 @@ export class PlanLayer implements Layer {
         });
       }
       const [tx, ty] = w.point(biteAlong - 5.4, -biteMm / 2);
-      text(ctx, `${biteMm} mm`, tx, ty, { size: clamp(2.3 * px, 10, 14), color: C.cyan, alpha: rulerOn * this.ruler.part(t, 1.6, 0.5), weight: 600 });
+      text(ctx, `${biteMm} mm`, tx, ty, { size: clamp(2.6 * px, 13, 17), color: C.cyan, alpha: rulerOn * this.ruler.part(t, 1.6, 0.5), weight: 600 });
     }
   }
 }

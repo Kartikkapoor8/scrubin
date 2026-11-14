@@ -120,6 +120,7 @@ async function boot(): Promise<void> {
     toolDistanceMm: -1,
     attract: false,
     relockAt: -1e9,
+    keepOut: [],
     highlight: { structure: '', until: 0 },
   };
 
@@ -516,6 +517,7 @@ async function boot(): Promise<void> {
   // ----- The frame loop -----
   const holdCtx = hold.getContext('2d', { alpha: false })!;
   let lastHold = 0;
+  let lastKeepOut = 0;
   let last = performance.now();
   const started = last;
   // Seconds of quiet before the idle screen, before a finished run resets, and before an abandoned one does.
@@ -592,6 +594,19 @@ async function boot(): Promise<void> {
         hold.height = video.videoHeight;
       }
       try { holdCtx.drawImage(video, 0, 0, hold.width, hold.height); } catch { /* frame not ready */ }
+    }
+
+    // Where the HUD panels are, so labels on the picture can keep clear of them.
+    if (now - lastKeepOut > 200) {
+      lastKeepOut = now;
+      const origin = stage.getBoundingClientRect();
+      scene.keepOut = [];
+      for (const panel of hud.root.querySelectorAll<HTMLElement>('.steps, .vitals, .score.panel--on')) {
+        if (scene.attract || Number(getComputedStyle(panel).opacity) < 0.5) continue;
+        const box = panel.getBoundingClientRect();
+        if (box.width < 4 || box.height < 4) continue;
+        scene.keepOut.push({ x0: box.left - origin.left, y0: box.top - origin.top, x1: box.right - origin.left, y1: box.bottom - origin.top });
+      }
     }
 
     renderer.resize(stage.clientWidth, stage.clientHeight);

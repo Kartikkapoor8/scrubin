@@ -30,6 +30,13 @@ export function saveSettings(settings: Settings): void {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* not saved */ }
 }
 
+export interface KeepOut {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
 /** Everything the overlay layers read. One object, shared, updated in place. */
 export interface Scene {
   procedure: Procedure;
@@ -49,6 +56,11 @@ export interface Scene {
   attract: boolean;
   /** App time at which the wound-lock brackets should snap in again (set by the scan as it passes the wound). */
   relockAt: number;
+  /**
+   * Parts of the screen covered by HUD panels (stage pixels). Labels drawn on the picture move out from
+   * under them, so a name is never half hidden behind a panel.
+   */
+  keepOut: KeepOut[];
   /** A structure the attending is pointing at ('' = none) and the app time the highlight ends. */
   highlight: { structure: string; until: number };
 }

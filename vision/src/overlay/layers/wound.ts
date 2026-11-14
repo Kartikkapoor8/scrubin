@@ -33,7 +33,7 @@ export class WoundLockLayer implements Layer {
     if (this.searching > 0.01) {
       const dots = '.'.repeat(1 + (Math.floor(t * 2) % 3));
       text(ctx, `LOOKING FOR THE WOUND${dots.padEnd(3, ' ')}`, frame.width / 2, frame.height * 0.84, {
-        size: 13, color: C.cyan, alpha: this.searching * (0.6 + 0.25 * Math.sin(t * 2.4)), tracking: 0.28, weight: 600,
+        size: 16, color: C.cyan, alpha: this.searching * (0.7 + 0.25 * Math.sin(t * 2.4)), tracking: 0.24, weight: 600,
       });
     }
 
@@ -63,7 +63,7 @@ export class WoundLockLayer implements Layer {
     if (step === 'standby') {
       const tagAlpha = presence * ease.outCubic(progress(t, this.lockedAt + 0.45, 0.5));
       const [tx, ty] = w.point(0, halfAcross + 5.5);
-      text(ctx, 'WOUND LOCKED', tx, ty, { size: 11, color: C.cyan, alpha: tagAlpha, tracking: 0.22, weight: 600 });
+      text(ctx, 'WOUND LOCKED', tx, ty, { size: 13, color: C.cyan, alpha: tagAlpha, tracking: 0.22, weight: 600 });
     }
   }
 }

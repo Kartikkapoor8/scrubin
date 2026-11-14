@@ -28,11 +28,13 @@ export class TitleCard {
     this.root.classList.remove('title-card--on');
     void this.root.offsetWidth; // restart the entrance
     this.root.classList.add('title-card--on');
+    this.root.parentElement?.classList.add('hud--title');
     this.timer = window.setTimeout(() => this.hide(), 3600);
   }
 
   private hide(): void {
     window.clearTimeout(this.timer);
     this.root.classList.remove('title-card--on');
+    this.root.parentElement?.classList.remove('hud--title');
   }
 }

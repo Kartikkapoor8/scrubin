@@ -98,17 +98,18 @@ export class ScanLayer implements Layer {
     const done = percent >= 100;
     const readY = height - Math.max(70, height * 0.11);
     text(ctx, done ? 'FIELD MAPPED' : 'SCANNING FIELD', width / 2, readY, {
-      size: 13, color: done ? C.green : C.cyan, alpha: presence, tracking: 0.3, weight: 600,
+      size: 17, color: done ? C.green : C.cyan, alpha: presence, tracking: 0.26, weight: 600,
     });
-    const barWidth = Math.min(260, width * 0.2);
-    glow(ctx, segment(width / 2 - barWidth / 2, readY + 16, width / 2 + barWidth / 2, readY + 16), C.white, {
+    const barWidth = Math.min(380, width * 0.26);
+    const barY = readY + 27;
+    glow(ctx, segment(width / 2 - barWidth / 2, barY, width / 2 + barWidth / 2, barY), C.white, {
       width: 1, alpha: presence * 0.25, bloom: 0, halo: 0.4,
     });
     if (percent > 0) {
-      glow(ctx, segment(width / 2 - barWidth / 2, readY + 16, width / 2 - barWidth / 2 + (barWidth * percent) / 100, readY + 16), done ? C.green : C.cyan, {
+      glow(ctx, segment(width / 2 - barWidth / 2, barY, width / 2 - barWidth / 2 + (barWidth * percent) / 100, barY), done ? C.green : C.cyan, {
         width: 2, alpha: presence, bloom: 1, halo: 0,
       });
     }
-    text(ctx, `${percent}%`, width / 2 + barWidth / 2 + 26, readY + 16, { size: 11, color: C.white, alpha: presence * 0.8, weight: 500 });
+    text(ctx, `${percent}%`, width / 2 + barWidth / 2 + 40, barY, { size: 13, color: C.white, alpha: presence * 0.85, weight: 600 });
   }
 }
