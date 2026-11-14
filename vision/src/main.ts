@@ -29,6 +29,7 @@ import { FeedbackToast } from './ui/feedback';
 import { Hud } from './ui/hud';
 import { ScoreCard } from './ui/score';
 import { StepPanel } from './ui/steps';
+import { TitleCard } from './ui/title';
 import { VitalsPanel } from './ui/vitals';
 
 interface ServerConfig {
@@ -122,6 +123,7 @@ async function boot(): Promise<void> {
   renderer.add(new DebugLayer(scene));
 
   new StepPanel(hud.root, procedure);
+  new TitleCard(hud.root, procedure);
   new FeedbackToast(hud.root, procedure);
   new ScoreCard(hud.root, procedure);
   const vitals = new VitalsPanel(hud.root, procedure);

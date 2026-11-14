@@ -13,6 +13,7 @@ export class WoundLockLayer implements Layer {
   private presence = new Appear(4, 5);
   private lockedAt = -1e9;
   private wasLocked = false;
+  private searching = 0;
 
   constructor(private scene: Scene) {}
 
@@ -25,6 +26,16 @@ export class WoundLockLayer implements Layer {
     if (pose.locked && !this.wasLocked) this.lockedAt = t;
     this.wasLocked = pose.locked;
     if (this.scene.relockAt > this.lockedAt) this.lockedAt = this.scene.relockAt;
+
+    // Nothing found yet: say what the system is doing, quietly, instead of showing an empty picture.
+    const searching = !hidden && step === 'standby' && !pose.locked && pose.confidence < 0.05;
+    this.searching += ((searching ? 1 : 0) - this.searching) * (1 - Math.exp(-(searching ? 1.2 : 6) * dt));
+    if (this.searching > 0.01) {
+      const dots = '.'.repeat(1 + (Math.floor(t * 2) % 3));
+      text(ctx, `LOOKING FOR THE WOUND${dots.padEnd(3, ' ')}`, frame.width / 2, frame.height * 0.84, {
+        size: 13, color: C.cyan, alpha: this.searching * (0.6 + 0.25 * Math.sin(t * 2.4)), tracking: 0.28, weight: 600,
+      });
+    }
 
     const wanted = !hidden && pose.locked && (step === 'standby' || step === 'scan');
     const presence = this.presence.update(wanted, t, dt) * pose.confidence;

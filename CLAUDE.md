@@ -134,6 +134,12 @@ Things the runtime code relies on that live in the Windows agent's files. Keep t
 - UWP capabilities: SpatialPerception, Microphone, InternetClient.
 - Managed stripping: `Assets/ScrubIn/Core/link.xml` keeps all of `Assembly-CSharp` (modules are found by
   reflection). Do not raise the stripping level in a way that overrides it.
+- While VIPER Vision is showing the HoloLens stream, nothing else should be pulling it: close
+  `tools\spectate.ps1` and Device Portal's live preview, and do not start `tools\record.ps1` (assume the
+  headset serves one Mixed Reality Capture consumer at a time). To record a raw clip for the video, do it
+  before or after, then play the clip through VIPER Vision.
+- VIPER Vision needs the HoloLens and the Mac on the same network, and the Device Portal user name and
+  password in `vision/.env.local` on the Mac (same variable names as `tools/.env.local`).
 
 ## How your code gets run: `IScrubInModule`
 

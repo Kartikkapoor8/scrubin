@@ -68,7 +68,15 @@ export class HandTracker {
   detect(video: HTMLVideoElement, nowMs: number): void {
     if (this.debugTool) {
       const p = this.debugTool;
-      this.hands = [{ points: Array.from({ length: 21 }, () => ({ x: p.x, y: p.y })), tool: { x: p.x, y: p.y } }];
+      // A rough right hand reaching up from below, index fingertip on the point.
+      const shape = [
+        [70, 210], [20, 190], [-25, 150], [-50, 110], [-62, 74],     // wrist, thumb
+        [22, 96], [10, 58], [4, 28], [0, 0],                          // index
+        [52, 88], [50, 44], [50, 14], [50, -10],                      // middle
+        [80, 96], [86, 58], [90, 32], [92, 10],                       // ring
+        [106, 116], [118, 88], [126, 68], [132, 50],                  // little
+      ];
+      this.hands = [{ points: shape.map(([dx, dy]) => ({ x: p.x + dx, y: p.y + dy })), tool: { x: p.x, y: p.y } }];
       this.lastSeen = nowMs;
       return;
     }

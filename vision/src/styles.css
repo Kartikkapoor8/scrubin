@@ -897,3 +897,88 @@ body {
 .stage--idle {
   cursor: none;
 }
+
+/* ---------- Opening title (over the picture as the scan starts) ---------- */
+
+.title-card {
+  position: absolute;
+  left: 50%;
+  top: 19%;
+  transform: translateX(-50%);
+  text-align: center;
+  opacity: 0;
+  transition: opacity 700ms ease;
+  white-space: nowrap;
+}
+
+.title-card--on {
+  opacity: 1;
+}
+
+.title-card__name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--u) * 9.5);
+  line-height: 1;
+  letter-spacing: 1.1em;
+  padding-left: 1.1em; /* balances the spacing after the last letter, so the word stays centred */
+  color: #fff;
+  text-shadow: 0 0 calc(var(--u) * 3) rgba(var(--cyan-rgb), 0.65), 0 0 calc(var(--u) * 0.6) rgba(var(--cyan-rgb), 0.8);
+  filter: blur(calc(var(--u) * 0.8));
+  transition: letter-spacing 1600ms var(--ease-out), padding-left 1600ms var(--ease-out), filter 900ms ease;
+}
+
+.title-card--on .title-card__name {
+  letter-spacing: 0.42em;
+  padding-left: 0.42em;
+  filter: blur(0);
+}
+
+.title-card__rule {
+  width: 0;
+  height: 1px;
+  margin: calc(var(--u) * 1.8) auto calc(var(--u) * 1.4);
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  box-shadow: 0 0 calc(var(--u) * 1) rgba(var(--cyan-rgb), 0.9);
+  transition: width 1200ms var(--ease-out) 300ms;
+}
+
+.title-card--on .title-card__rule {
+  width: calc(var(--u) * 58);
+}
+
+.title-card__sub,
+.title-card__note {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  opacity: 0;
+  transform: translateY(calc(var(--u) * 0.6));
+  transition: opacity 600ms ease, transform 800ms var(--ease-out);
+}
+
+.title-card__sub {
+  font-size: calc(var(--u) * 1.35);
+  letter-spacing: 0.26em;
+  color: var(--text);
+  text-shadow: 0 0 calc(var(--u) * 1.2) rgba(var(--ink-rgb), 0.9);
+}
+
+.title-card__note {
+  margin-top: calc(var(--u) * 0.9);
+  font-size: calc(var(--u) * 1);
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  text-shadow: 0 0 calc(var(--u) * 1.2) rgba(var(--ink-rgb), 0.9);
+}
+
+.title-card--on .title-card__sub {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 700ms;
+}
+
+.title-card--on .title-card__note {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 1000ms;
+}

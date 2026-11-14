@@ -1,9 +1,12 @@
 import type { Scene } from '../../app/scene';
 import { clamp, damp } from '../../core/dom';
 import { PROCEDURE, sutureOffsetMm } from '../../procedure/data';
-import { C, circle, glow, mix, polyline, segment, text } from '../draw';
+import { C, circle, dot, glow, mix, polyline, segment, text } from '../draw';
 import type { Frame, Layer } from '../renderer';
 import { WoundSpace } from '../space';
+
+/** MediaPipe hand landmarks joined into bones: thumb, the four fingers, and across the knuckles. */
+const BONES = [[0, 1, 2, 3, 4], [0, 5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16], [0, 17, 18, 19, 20], [5, 9, 13, 17]];
 
 /** How close (mm) the working fingertip must be to the current target to count as aligned. */
 const ALIGNED_MM = 7;
@@ -33,6 +36,7 @@ export class HandLayer implements Layer {
 
     // The fingertip nearest the wound, if any hand is close enough to matter.
     let best: { x: number; y: number; along: number; across: number } | null = null;
+    let bestPoints: Array<{ x: number; y: number }> | null = null;
     let bestDistance = NEAR_MM;
     if (pose.locked && !scene.hidden) {
       for (const hand of hands.hands) {
@@ -41,6 +45,7 @@ export class HandLayer implements Layer {
         if (distance < bestDistance) {
           bestDistance = distance;
           best = { x: hand.tool.x, y: hand.tool.y, ...mm };
+          bestPoints = hand.points;
         }
       }
     }
@@ -84,6 +89,19 @@ export class HandLayer implements Layer {
     const color = mix(C.white, C.green, this.aligned);
     const alpha = this.presence * pose.confidence;
     const radius = 9 + this.aligned * 2 + Math.sin(t * 5) * 0.6 * this.aligned;
+
+    // The hand itself, lightly: the bones the tracker sees, and a dot on each fingertip.
+    if (bestPoints && bestPoints.length >= 21) {
+      const flat: number[] = [];
+      for (const chain of BONES) {
+        flat.length = 0;
+        for (const index of chain) flat.push(view.toScreenX(bestPoints[index].x), view.toScreenY(bestPoints[index].y));
+        glow(ctx, polyline(flat), C.cyan, { width: 1.1, alpha: alpha * 0.42, bloom: 0.4, halo: 0.3 });
+      }
+      for (const tip of [4, 12, 16, 20]) {
+        dot(ctx, view.toScreenX(bestPoints[tip].x), view.toScreenY(bestPoints[tip].y), 1.8, C.cyan, alpha * 0.6, 0.3);
+      }
+    }
 
     // Guide line from the fingertip to the target once it is within reach.
     if (distance >= 0 && distance < 45) {
