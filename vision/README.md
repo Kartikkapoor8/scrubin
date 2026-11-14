@@ -171,6 +171,8 @@ the detail. Tell the Mac agent which level it settled on (`__viper.brain` in the
 | `C` / `Shift` + `C` | Record the raw HoloLens stream to `vision/media/` (press again to stop) / record exactly 60 s |
 | `K` / `M` / `J` | Pick the marker colour by clicking it / step through colour presets / ignore holograms on or off |
 | `D` | Debug view of the tracker |
+| `Y` | Sync clock, for measuring how far the headset's picture trails real life |
+| `-` / `=` | Suture trigger delay, down / up 0.1 s (HoloLens input only; remembered) |
 | `T` | Zoom toward the wound while planning and stitching: on / off |
 | `F` / `O` | Full screen / fill the screen or show the whole picture |
 | `?` | The full key list, on screen |
@@ -189,6 +191,13 @@ the detail. Tell the Mac agent which level it settled on (`__viper.brain` in the
   player add roughly 0.1 to 0.2 s on top of the headset's own encoding delay. If the browser refuses the
   stream that way, it falls back by itself to handing the stream to the video element (about 0.6 s behind);
   `?hlmode=progressive` forces that. Both reconnect by themselves when the stream ends or stalls.
+- **The lag, and matching it.** The headset's picture arrives a second or more after real life. Press `Y`:
+  a large running clock appears. Point the headset at the Mac's screen and compare the clock with its own
+  image in the picture; the difference is the lag. Set it with `-` and `=` (0.1 s steps), then `Y` again.
+  From then on a suture triggered by Space, the clicker or the phone starts that much later, so an operator
+  who presses as the trainee's hand lands sees the stitch play when the screen shows it land. Step changes
+  and Reset are never delayed, and other inputs ignore the setting. If the operator watches the screen
+  rather than the hands, leave it at 0.
 - **Recording.** `C` saves the stream exactly as the headset sent it to `vision/media/hololens-<date>-<time>.mp4`
   (no re-encoding; press `C` again to stop, `Shift` + `C` for exactly 60 s). Key `3` plays the newest clip, so a
   recording is at once the backup for a dead headset and footage for the video.

@@ -75,6 +75,8 @@ const KEYS: Array<[string, string]> = [
   ['F', 'Full screen'],
   ['O', 'Fill the screen / show the whole picture'],
   ['D', 'Tracking debug view'],
+  ['Y', 'Sync clock: measure how far the headset picture trails real life'],
+  ['- =', 'Suture trigger delay, to match that lag (HoloLens input only)'],
   ['?', 'Show or hide this list'],
 ];
 
@@ -145,6 +147,10 @@ async function boot(): Promise<void> {
   const vitals = new VitalsPanel(hud.root, procedure);
   const attending = new AttendingCard(bottom);
   const attract = new AttractScreen(hud.root);
+  // A running clock for measuring how far the headset's picture trails real life (key Y).
+  const syncClock = add(hud.root, el('div', 'sync-clock'));
+  const syncDigits = add(syncClock, el('div', 'sync-clock__digits', '00.0'));
+  add(syncClock, el('div', 'sync-clock__note', 'Point the headset at this screen. The clock in its picture is behind this one by the lag. Set it with - and =, then Y.'));
   const sounds = new Sounds();
   if (params.get('sound') === '0') sounds.muted = true;
 
@@ -262,8 +268,21 @@ async function boot(): Promise<void> {
     attract.set(false);
     scene.attract = false;
   };
+  // The headset's picture trails real life by a second or more. An operator watching the trainee's hands
+  // presses as the needle lands; the screen shows it land later. Placing a suture waits out that lag, so
+  // the stitch plays when the audience sees the hand arrive. Step changes are never delayed.
+  const waiting = new Set<number>();
+  const afterLag = (run: () => void) => {
+    const wait = input.current.kind === 'hololens' ? settings.inputDelayMs : 0;
+    if (wait <= 0) { run(); return; }
+    const timer = window.setTimeout(() => { waiting.delete(timer); run(); }, wait);
+    waiting.add(timer);
+  };
+  const placesSuture = () => procedure.step.id === 'stitch' && procedure.stitchesDone + waiting.size < procedure.count;
   const resetNow = () => {
     // Back to Ready at once: no fades, nothing left on screen from the last group.
+    for (const timer of waiting) window.clearTimeout(timer);
+    waiting.clear();
     procedure.setAutoplay(false);
     procedure.reset();
     brain.silence();
@@ -279,7 +298,12 @@ async function boot(): Promise<void> {
     next: () => {
       touch();
       if (procedure.step.id === 'complete') resetNow();
-      else procedure.advance();
+      else if (placesSuture()) afterLag(() => procedure.advance());
+      else if (waiting.size === 0) procedure.advance();
+    },
+    stitch: () => {
+      touch();
+      if (placesSuture()) afterLag(() => procedure.startStitch());
     },
     back: () => { touch(); procedure.back(); },
     reset: resetNow,
@@ -396,7 +420,17 @@ async function boot(): Promise<void> {
       case ' ': case 'PageDown': actions.next(); break;
       case 'ArrowRight': if (event.shiftKey) procedure.next(); else actions.next(); break;
       case 'ArrowLeft': case 'PageUp': actions.back(); break;
-      case 's': case 'S': procedure.startStitch(); break;
+      case 's': case 'S': actions.stitch(); break;
+      // The lag of the headset's picture: Y shows a running clock to measure it (point the headset at this
+      // screen and compare the clock with its own image), - and = set it.
+      case 'y': case 'Y': syncClock.classList.toggle('sync-clock--on'); break;
+      case '-': case '_': case '=': case '+': {
+        const step = event.key === '-' || event.key === '_' ? -100 : 100;
+        settings.inputDelayMs = clamp(settings.inputDelayMs + step, 0, 5000);
+        storeSettings();
+        hud.notice(`Suture trigger delay: ${(settings.inputDelayMs / 1000).toFixed(1)} s (HoloLens input only)`, 2000);
+        break;
+      }
       case 'r': case 'R': actions.reset(); break;
       // Talk to the attending: hold G (or tap it and speak). A presenter's "blank screen" button sends B or
       // a full stop, so those do the same. Shift + G turns the attending off and on.
@@ -607,6 +641,10 @@ async function boot(): Promise<void> {
         if (box.width < 4 || box.height < 4) continue;
         scene.keepOut.push({ x0: box.left - origin.left, y0: box.top - origin.top, x1: box.right - origin.left, y1: box.bottom - origin.top });
       }
+    }
+
+    if (syncClock.classList.contains('sync-clock--on')) {
+      syncDigits.textContent = ((now / 1000) % 100).toFixed(1).padStart(4, '0');
     }
 
     renderer.resize(stage.clientWidth, stage.clientHeight);

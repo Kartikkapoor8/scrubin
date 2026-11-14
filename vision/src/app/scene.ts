@@ -13,12 +13,17 @@ export interface Settings {
   autoZoom: boolean;
   /** Track ink only: ignore anything that glows like a hologram. Off only when the "wound" is itself a hologram. */
   inkOnly: boolean;
+  /**
+   * How far the headset's picture trails real life, in milliseconds. A suture triggered by the operator
+   * starts this much later, so it plays when the screen shows the hand arriving. HoloLens input only.
+   */
+  inputDelayMs: number;
 }
 
 const SETTINGS_KEY = 'viper.settings.v1';
 
 export function loadSettings(): Settings {
-  const defaults: Settings = { acrossScale: 1, flipAlong: false, flipSide: false, autoZoom: true, inkOnly: true };
+  const defaults: Settings = { acrossScale: 1, flipAlong: false, flipSide: false, autoZoom: true, inkOnly: true, inputDelayMs: 0 };
   try {
     return { ...defaults, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
   } catch {
