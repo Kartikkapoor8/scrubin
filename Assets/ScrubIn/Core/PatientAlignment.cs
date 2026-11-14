@@ -6,6 +6,11 @@ namespace ScrubIn
     /// Owns where PatientRoot sits in the room. The pose is stored as plain numbers (a pivot at the wound
     /// centre, yaw / pitch / roll, scale) and the transform is rebuilt from them on every change, so repeated
     /// nudges never drift and every rotation turns about the wound rather than about the wrist.
+    ///
+    /// Two ways to place it:
+    ///  - Operator keys nudge it (OperatorInput).
+    ///  - Follow mode: it floats where the wearer is looking until it is placed. This is how alignment works on
+    ///    the headset with no keyboard: look at the arm, air tap.
     /// </summary>
     public class PatientAlignment : MonoBehaviour
     {
@@ -13,6 +18,13 @@ namespace ScrubIn
         public const float SpawnDrop = 0.45f;      // meters below the head
         public const float MinScale = 0.7f;
         public const float MaxScale = 1.4f;
+
+        // Follow mode keeps the wound on the wearer's line of sight at the same range as the spawn pose
+        // (0.7 m ahead and 0.45 m down is 0.83 m away, 33 degrees below level).
+        const float FollowDistance = 0.832f;
+        const float FollowMinPitch = 15f;
+        const float FollowMaxPitch = 65f;
+        const float FollowRate = 5f;               // 1/s; higher = snappier, lower = steadier
 
         static readonly int WorldToPatientId = Shader.PropertyToID("_ScrubInWorldToPatient");
 
@@ -24,6 +36,9 @@ namespace ScrubIn
         public float Scale { get; private set; }
         public bool Locked { get; private set; }
         public bool Placed { get; private set; }
+
+        /// <summary>True while the patient frame is following the wearer's gaze.</summary>
+        public bool Following { get; private set; }
 
         Transform _head;
         Transform _stage;
@@ -68,18 +83,29 @@ namespace ScrubIn
             AimStage(true);
         }
 
-        /// <summary>Moves the patient in the wearer's frame, in meters: right, up, away.</summary>
+        /// <summary>Turns gaze-following on or off. It cannot be on while alignment is locked.</summary>
+        public void SetFollowing(bool on)
+        {
+            Following = on && !Locked;
+        }
+
+        /// <summary>Moves the patient in the wearer's frame, in meters: right, up, away. Ends gaze-following.</summary>
         public void Nudge(float right, float up, float away)
         {
+            Following = false;
             Vector3 forward = FlatForward();
             Vector3 rightDir = Vector3.Cross(Vector3.up, forward);
             PivotWorld += rightDir * right + Vector3.up * up + forward * away;
             Apply();
         }
 
-        /// <summary>Adds to yaw (about vertical), pitch (elbow up) and roll (about the arm's long axis), in degrees.</summary>
+        /// <summary>
+        /// Adds to yaw (about vertical), pitch (elbow up) and roll (about the arm's long axis), in degrees.
+        /// Ends gaze-following.
+        /// </summary>
         public void Rotate(float yaw, float pitch, float roll)
         {
+            Following = false;
             Yaw = Mathf.Repeat(Yaw + yaw + 180f, 360f) - 180f;
             Pitch = Mathf.Clamp(Pitch + pitch, -45f, 45f);
             Roll = Mathf.Clamp(Roll + roll, -60f, 60f);
@@ -96,6 +122,7 @@ namespace ScrubIn
         {
             if (Locked == locked) return;
             Locked = locked;
+            if (locked) Following = false;
             AimStage(true);
             ScrubInEvents.RaiseAlignmentLocked(locked);
         }
@@ -118,8 +145,33 @@ namespace ScrubIn
 
         void LateUpdate()
         {
+            if (_head == null) return;
+
+            if (Following && !Locked) FollowGaze();
             PushShaderGlobals();
             if (Placed && !Locked) AimStage(false);
+        }
+
+        // Eases the wound toward the point 0.83 m along the wearer's line of sight (never higher than a little
+        // below eye level), with the arm lying level across their view.
+        void FollowGaze()
+        {
+            Vector3 flat = FlatForward();
+            Vector3 right = Vector3.Cross(Vector3.up, flat);
+            float pitchDown = Mathf.Asin(Mathf.Clamp(-_head.forward.y, -1f, 1f)) * Mathf.Rad2Deg;
+            float pitch = Mathf.Clamp(pitchDown, FollowMinPitch, FollowMaxPitch);
+            Vector3 direction = Quaternion.AngleAxis(pitch, right) * flat;
+
+            Vector3 targetPivot = _head.position + direction * FollowDistance;
+            float targetYaw = Mathf.Atan2(flat.x, flat.z) * Mathf.Rad2Deg;
+
+            float k = 1f - Mathf.Exp(-FollowRate * Time.deltaTime);
+            PivotWorld = Placed ? Vector3.Lerp(PivotWorld, targetPivot, k) : targetPivot;
+            Yaw = Placed ? Mathf.LerpAngle(Yaw, targetYaw, k) : targetYaw;
+            Pitch = Mathf.Lerp(Pitch, 0f, k);
+            Roll = Mathf.Lerp(Roll, 0f, k);
+            Placed = true;
+            Apply();
         }
 
         // HoloGlow uses this to run reveal wipes in patient space.

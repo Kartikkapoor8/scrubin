@@ -5,9 +5,8 @@ using UnityEngine.XR;
 namespace ScrubIn
 {
     /// <summary>
-    /// Keyboard controls for the operator at the PC. This is the guaranteed demo path: nothing here depends on
-    /// the headset's hand input. Full key table in CLAUDE.md.
-    /// Build step 1 covers alignment. Procedure keys (Space, S, R, V, A, H) arrive with build step 2.
+    /// Keyboard controls for the operator: in the editor, or on the headset with a Bluetooth keyboard paired.
+    /// Nothing here depends on the headset's hand input. Full key table in CLAUDE.md.
     /// </summary>
     public class OperatorInput : MonoBehaviour
     {
@@ -17,13 +16,17 @@ namespace ScrubIn
 
         ScrubInBootstrap _bootstrap;
         ScrubInContext _ctx;
+        HoloInput _holoInput;
+        bool _holoWound;
         readonly Dictionary<KeyCode, float> _nextRepeat = new Dictionary<KeyCode, float>();
         readonly Dictionary<KeyCode, float> _heldSince = new Dictionary<KeyCode, float>();
 
-        public void Init(ScrubInBootstrap bootstrap, ScrubInContext ctx)
+        public void Init(ScrubInBootstrap bootstrap, ScrubInContext ctx, HoloInput holoInput)
         {
             _bootstrap = bootstrap;
             _ctx = ctx;
+            _holoInput = holoInput;
+            _holoWound = ctx.Procedure.options.holoWound;
         }
 
         void Update()
@@ -33,11 +36,23 @@ namespace ScrubIn
 
             if (Input.GetKeyDown(KeyCode.L)) alignment.ToggleLocked();
 
+            // Enter does what an air tap does (places the outline).
+            if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) _holoInput.Tap();
+
+            if (Input.GetKeyDown(KeyCode.W))
+            {
+                _holoWound = !_holoWound;
+                ScrubInEvents.RaiseLayerVisibility(ArmOutline.HoloWoundLayer, _holoWound);
+            }
+
+            // C: back in front of the wearer (in the editor preview it also resets the camera).
+            if (Input.GetKeyDown(KeyCode.C)) _bootstrap.Recenter();
+
 #if UNITY_EDITOR
             if (Input.GetKeyDown(KeyCode.F1)) _showLegend = !_showLegend;
 #endif
 
-            if (alignment.Locked) return;   // locked: the arrows belong to the procedure (build step 2)
+            if (alignment.Locked) return;
 
             bool fine = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
             float move = fine ? 0.001f : 0.005f;
@@ -56,8 +71,6 @@ namespace ScrubIn
 
             int grow = Steps(KeyCode.RightBracket) - Steps(KeyCode.LeftBracket);
             if (grow != 0) alignment.ScaleBy(Mathf.Pow(1.01f, grow));
-
-            if (Input.GetKeyDown(KeyCode.C)) _bootstrap.Recenter();
         }
 
         // How many steps a key asks for this frame: 0 if none, 1 on a tap and while it repeats, 4 once it has
@@ -106,22 +119,23 @@ namespace ScrubIn
             PatientAlignment a = _ctx.Alignment;
             IList<string> warnings = ScrubInLog.Warnings;
 
-            GUILayout.BeginArea(new Rect(8f, 8f, 600f, 150f + 34f * warnings.Count), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(8f, 8f, 640f, 150f + 34f * warnings.Count), GUI.skin.box);
 
             string device = _ctx.IsHeadset
                 ? "HEADSET (" + XRSettings.loadedDeviceName + ")"
-                : "DESKTOP PREVIEW, no headset: right-drag orbits, scroll zooms";
+                : "EDITOR PREVIEW, no headset: right-drag orbits, scroll zooms, C resets the view";
             GUILayout.Label("VIPER operator  |  " + device + "  |  " + Mathf.RoundToInt(1f / Mathf.Max(Time.smoothDeltaTime, 0.0001f)) + " fps", _text);
 
             if (a.Locked)
             {
-                GUILayout.Label("Alignment LOCKED.  L = unlock (shows the outline again).", _text);
+                GUILayout.Label("Outline PLACED (locked).  L = pick it up again  |  W = hologram wound line " + (_holoWound ? "ON" : "off"), _text);
             }
             else
             {
-                GUILayout.Label("Alignment UNLOCKED.  L = lock when the outline sits on the arm.", _text);
+                GUILayout.Label("Outline NOT placed" + (a.Following ? " (following the wearer's gaze)" : "")
+                                + ".  Enter or air tap = place  |  L = lock / unlock", _text);
                 GUILayout.Label("Arrows move 5 mm  |  PgUp/PgDn height  |  Q/E yaw 2\u00B0  |  Z/X roll  |  1/2 pitch  |  [ ] scale  |  Shift = fine", _text);
-                GUILayout.Label("Hold a key to repeat (it speeds up after a second)  |  C = re-place 0.7 m in front of the wearer, 0.45 m below their head", _text);
+                GUILayout.Label("Hold a key to repeat (it speeds up after a second)  |  C = back in front of the wearer", _text);
             }
 
             Vector3 p = a.PivotWorld;

@@ -39,15 +39,14 @@
     "summary": "{done}/{count} sutures · avg spacing {avg} mm · time {time}"
   },
   "prompts": {
-    "place": "Look at the arm to line up the outline. Air tap to place it.",
-    "begin": "Outline placed. Air tap to begin. Press and hold to reposition."
+    "place": "Look at the arm · air tap to place"
   },
   "options": {
     "followGazeUntilPlaced": true,
-    "holdToReposition": true,
+    "holdToReposition": false,
     "focusPoint": true,
-    "stitchDetailView": true,
-    "sound": true
+    "holoWound": false,
+    "holoWoundColor": "39FF14"
   },
   "steps": [
     {

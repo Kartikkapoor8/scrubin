@@ -101,31 +101,38 @@ namespace ScrubIn
         public string summary = "{done}/{count} sutures \u00B7 avg spacing {avg} mm \u00B7 time {time}";
     }
 
-    /// <summary>Lines the Attending card shows before the procedure starts.</summary>
+    /// <summary>Short prompts shown in the headset.</summary>
     [Serializable]
     public class PromptData
     {
-        public string place = "Look at the arm to line up the outline. Air tap to place it.";
-        public string begin = "Outline placed. Air tap to begin. Press and hold to reposition.";
+        /// <summary>Shown above the outline until it is placed.</summary>
+        public string place = "Look at the arm \u00B7 air tap to place";
     }
 
-    /// <summary>Feature switches. Anything that turns out flaky on the headset gets switched off here, no rebuild of code needed.</summary>
+    /// <summary>Feature switches. Anything that turns out flaky on the headset gets switched off here; no code change needed.</summary>
     [Serializable]
     public class OptionsData
     {
         /// <summary>On the headset, the outline follows the wearer's gaze until it is placed (air tap, L, or any nudge).</summary>
         public bool followGazeUntilPlaced = true;
 
-        /// <summary>Before the procedure starts, press-and-hold picks the outline up again.</summary>
-        public bool holdToReposition = true;
+        /// <summary>
+        /// After placing, press-and-hold picks the outline up again. Off by default: a hand doing pretend
+        /// surgery in view of the headset can look like a held press.
+        /// </summary>
+        public bool holdToReposition = false;
 
         /// <summary>Tell the HoloLens to stabilise holograms at the wound (SetFocusPointForFrame).</summary>
         public bool focusPoint = true;
 
-        /// <summary>Show the magnified cross-section of the current suture.</summary>
-        public bool stitchDetailView = true;
+        /// <summary>
+        /// Draw the wound as a bright hologram line once placed, for running with no real arm. Off by default
+        /// so it never covers the marker line that VIPER Vision tracks on the real arm.
+        /// </summary>
+        public bool holoWound = false;
 
-        public bool sound = true;
+        /// <summary>Colour of that hologram wound line, as RRGGBB. Match VIPER Vision's marker colour.</summary>
+        public string holoWoundColor = "39FF14";
     }
 
     [Serializable]
@@ -201,7 +208,7 @@ namespace ScrubIn
             if (prompts == null) prompts = new PromptData();
             if (options == null) options = new OptionsData();
             if (prompts.place == null) prompts.place = "";
-            if (prompts.begin == null) prompts.begin = "";
+            if (string.IsNullOrEmpty(options.holoWoundColor)) options.holoWoundColor = "39FF14";
             if (sutures.measuredSpacingMm == null) sutures.measuredSpacingMm = new float[0];
             if (sutures.attendingLines == null) sutures.attendingLines = new string[0];
             if (sutures.feedback == null) sutures.feedback = "";

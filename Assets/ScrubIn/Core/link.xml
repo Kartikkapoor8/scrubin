@@ -1,0 +1,5 @@
+<linker>
+  <!-- Features are found by reflection (IScrubInModule), so IL2CPP's managed stripping must keep every type
+       in the project's own assembly. -->
+  <assembly fullname="Assembly-CSharp" preserve="all" />
+</linker>

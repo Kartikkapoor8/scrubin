@@ -6,6 +6,24 @@ and the shader name (`ScrubIn/HoloGlow`) keep the old name on purpose, so nothin
 
 Read this whole file before writing code. If you change a shared contract, change this file in the same commit.
 
+## Scope change (Saturday, about 2 pm): two apps now
+
+The beautiful overlays and Gemini moved **off the HoloLens and onto the Mac**.
+
+1. **HoloLens app (Unity, `Assets/`) is minimal and parked.** It shows a light holographic forearm the wearer
+   can see and do pretend surgery on, plus alignment (look at the arm, air tap to place). No HUD panels, no
+   Attending panel, no score card, no procedure steps in Unity. The step script, suture animation, HUD and
+   anatomy described further down were **not built in Unity** and are not planned there; the anatomy x-ray
+   may come back only if it is cheap. Keep it light for the HL1 GPU.
+2. **VIPER Vision (`vision/`) is the main build.** A Mac app that shows the wearer's point of view full-screen
+   for the audience (the HoloLens Device Portal Mixed Reality Capture live stream, with Mac webcam and
+   recorded-video fallbacks) and draws every overlay on top of it: wound tracking, suture targets, the stitch
+   flow, anatomy, vitals, score, and a Gemini Live "Attending" that answers spoken questions. It must look
+   incredible and never break on stage. See `vision/README.md`.
+
+The marker wound on the real forearm is drawn in a **bright saturated green** (configurable in VIPER Vision),
+which is what the Mac tracks. The HoloLens app therefore draws nothing over the wound once the outline is placed.
+
 **Who does what (since Saturday afternoon):**
 - **Kartik's agent** (on a Mac with no Unity) writes all the Unity runtime code: Core, Visuals, Anatomy, Attending,
   and `procedure.json`. It compile-checks against the Unity 2019.4 assemblies before every push.
@@ -23,9 +41,10 @@ surgeon card coaching every step. It is a hackathon build for UCSC DevFest 2026 
 11:30 AM). The only goal is a beautiful, reliable live demo and demo video on a HoloLens (1st gen). Everything is
 scripted for one procedure. Fake whatever needs faking. It must look incredible and never break on stage.
 
-## Demo flow (what the judge sees)
+## Demo flow (what the audience sees, on the VIPER Vision screen)
 
-A teammate rests their **right** forearm palm-up on a table. The wearer stands over it. The procedure plays in steps:
+A teammate rests their **right** forearm palm-up on a table. The wearer stands over it. VIPER Vision plays the
+procedure in steps over the wearer's live view:
 
 | # | Step id | What happens |
 |---|---------|--------------|
@@ -75,14 +94,15 @@ Only write inside your own folders. Ask before touching someone else's.
 
 | Folder | Owner | Contents |
 |--------|-------|----------|
-| `Assets/ScrubIn/Core/` | Mac agent (Kartik) | `ScrubInBootstrap`, `ScrubInContext`, `IScrubInModule`, `ScrubInEvents`, `ProcedureData`, `PatientAlignment`, `OperatorInput`, `DesktopPreviewCamera`; `ProcedureController`, `HoloInput` |
-| `Assets/ScrubIn/Visuals/` | Mac agent (Kartik) | `Shaders/HoloGlow.shader`, `Palette`, `HoloMaterials`, `HoloElement`, `LineBuilder`, `TubeBuilder`, `LabelBuilder`, `ForearmShape`, `ArmOutline`; `SutureSystem`, `ProceduralAudio`; later `ScanSweep`, `Hud`, `TitleSequence` |
-| `Assets/ScrubIn/Anatomy/` | Mac agent (Kartik) | `ForearmAnatomy` (arteries, veins, nerve, tendons, bones, flow pulses, danger zone, labels), `VirtualArm` skin mesh |
-| `Assets/ScrubIn/Attending/` | Mac agent (Kartik) | `AttendingPanel` (typewriter text), `IAttending`, `ScriptedAttending`; later `GeminiAttending` |
+| `Assets/ScrubIn/Core/` | Mac agent (Kartik) | `ScrubInBootstrap`, `ScrubInContext`, `IScrubInModule`, `ScrubInEvents`, `ProcedureData`, `PatientAlignment`, `OperatorInput`, `HoloInput`, `DesktopPreviewCamera`, `link.xml` |
+| `Assets/ScrubIn/Visuals/` | Mac agent (Kartik) | `Shaders/HoloGlow.shader`, `Palette`, `HoloMaterials`, `HoloElement`, `LineBuilder`, `TubeBuilder`, `LabelBuilder`, `ForearmShape`, `ArmOutline` (the holographic forearm) |
+| `Assets/ScrubIn/Anatomy/` | Mac agent (Kartik) | Empty. The anatomy x-ray would go here if it comes back. |
+| `Assets/ScrubIn/Attending/` | Mac agent (Kartik) | Empty. The Attending now lives in VIPER Vision. |
 | `Assets/StreamingAssets/procedure.json` | Mac agent (Kartik) | The step script and every on-screen string. Text edits welcome from anyone; schema changes are additive only. |
 | `Assets/ScrubIn/Editor/` | **Windows agent** | `ScrubInProjectSetup.cs` (menu **ScrubIn**), `BuildScript.cs`. The Mac agent does not edit these; the Windows agent extends `ScrubInProjectSetup.cs` when the Mac agent asks (see "Requests for the Windows agent" below). |
 | `tools/` | **Windows agent** | Setup, build, deploy, record and checklist scripts. The Mac agent runs `tools/check-compile.sh` and `tools/gen_meta.py` but does not edit anything here. |
 | `ProjectSettings/`, `Packages/`, the scene, `Assets/TextMesh Pro/` | **Windows agent** | Pushed from the Windows machine. |
+| `vision/` | Mac agent (Kartik) | **VIPER Vision**, the main build: relay, tracking, overlays, Gemini. Its own `README.md`. |
 | `CLAUDE.md`, `README.md`, `docs/` | SHARED | Keep current. |
 
 ### Requests for the Windows agent
@@ -160,15 +180,15 @@ agreement; additions only.
 
 | Event | Raised by | Meaning |
 |-------|-----------|---------|
-| `StepChanged(int index, StepData step)` | Core (`ProcedureController`) | The procedure moved to step `index`. |
-| `StitchCompleted(int index)` | Visuals (`SutureSystem`) | Suture `index` (0-based) finished its animation. |
+| `StepChanged(int index, StepData step)` | (parked: nothing raises it in the minimal app) | The procedure moved to step `index`. |
+| `StitchCompleted(int index)` | (parked) | Suture `index` (0-based) finished its animation. |
 | `LayerVisibility(string layer, bool visible)` | Core | A named layer should animate in or out. Raised for every known layer on each step change, and by operator toggles. |
 | `AttendingSay(string text)` | Attending (or anyone) | The Attending card should type this line. |
 | `AlignmentLocked(bool locked)` | Core (`PatientAlignment`) | The operator locked or unlocked alignment. |
 
-Layer names in use (a step lists the ones that are visible): `title`, `scan`, `patientCard`, `vitals`, `wound`,
-`woundDims`, `anatomy`, `dangerZone`, `suturePlan`, `stitches`, `feedback`, `score`. Operator toggles:
-`virtualArm`, `hud`. A system owns its layer names; add new ones freely and list them here.
+Layer names actually used by the minimal app: `holoWound` (operator key `W`). The step layers in
+`procedure.json` (`title`, `scan`, `vitals`, `wound`, `anatomy`, `suturePlan`, `stitches`, `score`, …) describe
+the procedure VIPER Vision plays; nothing in Unity listens to them now.
 
 ## `procedure.json` schema
 
@@ -226,34 +246,47 @@ defaults are used and the editor legend shows a warning.
 - Line widths that read well at 0.7 m: 2.5–3 mm for primary contours, 1.5 mm for fine detail.
 - Look: cinematic medical sci-fi, clean and confident, never cluttered.
 
-## Operator controls (keyboard on the Windows PC; the guaranteed demo path)
+## HoloLens app controls
+
+On the headset with no keyboard:
+
+- The outline **follows the wearer's gaze** (0.83 m along the line of sight) until it is placed. Look at the
+  real arm, or have the patient slide their arm into the outline.
+- **Air tap places it.** The guides fade and a quieter cage stays on the arm. After that, taps do nothing, so
+  a hand doing pretend surgery in view of the headset cannot disturb it.
+- To re-place: restart the app, or pair a Bluetooth keyboard and press `L`. (Press-and-hold to re-place exists
+  but is off by default, `options.holdToReposition`, because a hand holding an instrument can look like a held
+  press.)
+
+Keyboard (in the Unity editor, or a Bluetooth keyboard paired with the headset):
 
 | Key | Action |
 |-----|--------|
-| `Space` | Next step |
-| `→` / `←` | Next / previous step **when alignment is locked**; nudge the patient **when unlocked** |
-| `S` | Perform the next stitch |
-| `R` | Reset the procedure |
-| Arrows | (unlocked) Move PatientRoot 5 mm: `←`/`→` across the wearer's view, `↑`/`↓` away from / toward the wearer. `Shift` = 1 mm |
-| `PageUp` / `PageDown` | (unlocked) Move up / down 5 mm. `Shift` = 1 mm |
-| `Q` / `E` | (unlocked) Yaw 2° about the wound. `Shift` = 0.5° |
-| `Z` / `X` | (unlocked) Roll about the arm's long axis, 2°. `Shift` = 0.5° |
-| `1` / `2` | (unlocked) Pitch (elbow up / down), 1°. `Shift` = 0.25° |
-| `[` / `]` | (unlocked) Scale the patient frame 1% (fit a bigger or smaller arm) |
-| `C` | (unlocked) Re-place the patient 0.7 m in front of and 0.45 m below the head, facing the wearer |
-| `L` | Lock / unlock alignment (unlocked shows the outline and axis gizmo; locked hides them) |
-| `V` | Toggle virtual arm skin |
-| `A` | Autoplay |
-| `H` | Hide / show all HUD |
-| `G` | Ask the attending (Phase 2) |
+| `Enter` | Same as an air tap: place the outline |
+| `L` | Lock / unlock (placed / not placed) |
+| `C` | Put the outline back in front of the wearer and let it follow their gaze again. In the editor preview it also resets the camera |
+| Arrows | (not placed) Move 5 mm: `←`/`→` across the wearer's view, `↑`/`↓` away from / toward the wearer. `Shift` = 1 mm |
+| `PageUp` / `PageDown` | (not placed) Move up / down 5 mm. `Shift` = 1 mm |
+| `Q` / `E` | (not placed) Yaw 2° about the wound. `Shift` = 0.5° |
+| `Z` / `X` | (not placed) Roll about the arm's long axis, 2°. `Shift` = 0.5° |
+| `1` / `2` | (not placed) Pitch (elbow up / down), 1°. `Shift` = 0.25° |
+| `[` / `]` | (not placed) Scale the patient frame 1% (fit a bigger or smaller arm) |
+| `W` | Toggle the hologram wound line (for running with no real arm; off by default, `options.holoWound`) |
+| `F1` | Hide the operator legend (editor only) |
 
-Keys repeat when held and speed up after a second. On the HoloLens, air tap = context action (next step, or stitch during `stitch`).
-A small operator legend is drawn with IMGUI in the editor Game view only; it never reaches the headset.
-Without a headset, the editor runs a **desktop preview**: right-drag orbits, scroll zooms.
+Keys repeat when held and speed up after a second. Any nudge stops the gaze-follow. A small operator legend is
+drawn with IMGUI in the editor Game view only. Without a headset the editor shows a **fixed camera at standing
+eye height looking down at the arm**: right-drag orbits, scroll zooms, `C` resets.
+
+Feature switches live in `procedure.json` under `options` (`followGazeUntilPlaced`, `holdToReposition`,
+`focusPoint`, `holoWound`, `holoWoundColor`), so the Windows operator can turn something off without a code change.
 
 ## Running it
 
-There are three ways to run, in order of how often they are used:
+**VIPER Vision:** `cd vision`, then see `vision/README.md` (it runs on the Mac and takes the HoloLens stream,
+the Mac webcam or a recorded video as input).
+
+**The HoloLens app** can be run three ways, in order of how often they are used:
 
 1. **Editor, no headset (the review loop).** Open the project in Unity 2019.4 and press Play. On-device deploys
    are slow, so this is where visuals get reviewed between deploys: a fixed camera at standing eye height looks
@@ -283,7 +316,10 @@ First-time setup on the Windows machine is in `docs/SETUP_WINDOWS.md`.
   to create matching `.meta` files with stable GUIDs, and `tools/check-compile.sh` to type-check at C# 7.3.
 - Third-party assets: list each one with its license in `README.md`.
 
-## Phase 2 — Gemini attending (not built yet; the seam only)
+## Gemini attending: moved to VIPER Vision
+
+The Attending (Gemini Live, spoken questions, answer cards) is built in `vision/`, not in Unity. The seam
+below was the Unity plan and is kept only for reference.
 
 ```csharp
 public interface IAttending

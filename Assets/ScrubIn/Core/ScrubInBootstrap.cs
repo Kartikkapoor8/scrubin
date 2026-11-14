@@ -15,6 +15,9 @@ namespace ScrubIn
     [DefaultExecutionOrder(-1000)]
     public class ScrubInBootstrap : MonoBehaviour
     {
+        /// <summary>Height of the stand-in "head" in the no-headset editor preview: standing eye height.</summary>
+        public const float PreviewEyeHeight = 1.6f;
+
         static ScrubInBootstrap _instance;
 
         ScrubInContext _ctx;
@@ -125,15 +128,18 @@ namespace ScrubIn
             if (!headset)
             {
                 cam.transform.SetParent(null, false);
-                cam.transform.position = Vector3.zero;
+                cam.transform.position = new Vector3(0f, PreviewEyeHeight, 0f);
                 cam.transform.rotation = Quaternion.identity;
+                cam.fieldOfView = 26f;   // a little wider than the HoloLens view (17.5 degrees tall)
                 _preview = cam.gameObject.AddComponent<DesktopPreviewCamera>();
                 _preview.Init(alignment);
             }
 
             // Operator input first, so its legend can show a warning if anything below fails.
+            HoloInput holoInput = gameObject.AddComponent<HoloInput>();
+            holoInput.Init(_ctx);
             OperatorInput input = gameObject.AddComponent<OperatorInput>();
-            input.Init(this, _ctx);
+            input.Init(this, _ctx, holoInput);
 
             try
             {
@@ -197,22 +203,31 @@ namespace ScrubIn
             ScrubInEvents.RaiseAlignmentLocked(_ctx.Alignment.Locked);
         }
 
-        /// <summary>Puts the patient back in front of the wearer (operator key C).</summary>
+        /// <summary>
+        /// Operator key C. Headset: puts the outline back in front of the wearer (and lets it follow their gaze
+        /// again). Editor preview: also puts the camera back at standing eye height looking down at the arm.
+        /// A locked alignment is never moved.
+        /// </summary>
         public void Recenter()
         {
             if (_ctx == null) return;
+            PatientAlignment alignment = _ctx.Alignment;
 
             if (_preview != null)
             {
-                // Desktop preview: measure from a standing "head" at the origin, then look down at the arm.
-                _ctx.Head.position = Vector3.zero;
-                _ctx.Head.rotation = Quaternion.identity;
-                _ctx.Alignment.PlaceInFrontOfHead();
-                _preview.Frame(Vector3.zero);
+                Vector3 eye = new Vector3(0f, PreviewEyeHeight, 0f);
+                if (!alignment.Locked)
+                {
+                    _ctx.Head.position = eye;
+                    _ctx.Head.rotation = Quaternion.identity;
+                    alignment.PlaceInFrontOfHead();
+                }
+                _preview.Frame(eye);
             }
-            else
+            else if (!alignment.Locked)
             {
-                _ctx.Alignment.PlaceInFrontOfHead();
+                alignment.PlaceInFrontOfHead();
+                alignment.SetFollowing(_ctx.Procedure.options.followGazeUntilPlaced);
             }
         }
 

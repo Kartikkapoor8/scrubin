@@ -133,6 +133,27 @@ namespace ScrubIn
             enabled = true;
         }
 
+        /// <summary>Fade to a partial brightness (0..1) and stay there; lines that were mid-trace finish drawing.</summary>
+        public void FadeTo(float alpha, float duration = 0.4f)
+        {
+            float now = Time.time;
+            alpha = Mathf.Clamp01(alpha);
+            IsShown = alpha > 0.002f;
+
+            _alphaFrom = Alpha;
+            _alphaTo = alpha;
+            _alphaStart = now;
+            _alphaDuration = duration;
+
+            _drawFrom = Draw;
+            _drawTo = IsShown ? 1f : Draw;
+            _drawStart = now;
+            _drawDuration = IsShown ? duration : 0f;
+
+            _animating = true;
+            enabled = true;
+        }
+
         public void SetShown(bool shown, float delay = 0f)
         {
             if (shown) Show(delay);
