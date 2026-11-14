@@ -13,6 +13,7 @@ import { StreamRecording } from './app/recording';
 import { AttendingBrain } from './brain/live';
 import type { BrainHost, Structure } from './brain/tools';
 import { AnatomyLayer } from './overlay/layers/anatomy';
+import { setReadability } from './overlay/draw';
 import { DebugLayer } from './overlay/layers/debug';
 import { HandLayer } from './overlay/layers/hand';
 import { MeasureLayer } from './overlay/layers/measure';
@@ -26,6 +27,7 @@ import { Procedure } from './procedure/machine';
 import { HandTracker } from './tracking/hands';
 import { loadMarker, MARKER_PRESETS, markerFromSample, saveMarker, WoundDetector, WoundTracker } from './tracking/wound';
 import { AttendingCard } from './ui/attending';
+import { AttractScreen } from './ui/attract';
 import { FeedbackToast } from './ui/feedback';
 import { Hud } from './ui/hud';
 import { ScoreCard } from './ui/score';
@@ -48,15 +50,16 @@ async function loadConfig(): Promise<ServerConfig> {
 }
 
 const KEYS: Array<[string, string]> = [
-  ['Space  →', 'Place the next suture, or go to the next step (a clicker does the same)'],
+  ['Space  →', 'Next: place the next suture, or go to the next step; after the score, start over'],
   ['←', 'Previous step'],
   ['Shift →', 'Next step, skipping any sutures not yet placed'],
+  ['Presenter', 'Forward = Next, back = previous step, blank-screen button (B or .) = talk'],
   ['S', 'Place the next suture'],
-  ['R', 'Reset the procedure'],
+  ['R', 'Reset to Ready, instantly'],
   ['A', 'Autoplay (for recording)'],
   ['H', 'Hide every overlay (clean picture)'],
   ['N', 'Sound on / off'],
-  ['G', 'Gemini attending: microphone on / off'],
+  ['G', 'Talk to the attending: hold and speak, or tap and speak (Shift+G turns it off / on)'],
   ['V', 'Attending speaks its answers aloud: on / off'],
   ['L', 'Send the attending the current picture'],
   ['1 2 3 4', 'Input: HoloLens / webcam / video file / simulated arm'],
@@ -111,6 +114,7 @@ async function boot(): Promise<void> {
     debug: params.get('debug') === '1',
     aligned: false,
     toolDistanceMm: -1,
+    attract: false,
     relockAt: -1e9,
     highlight: { structure: '', until: 0 },
   };
@@ -125,11 +129,17 @@ async function boot(): Promise<void> {
   renderer.add(new DebugLayer(scene));
 
   new StepPanel(hud.root, procedure);
+  // Table mode: lines and lettering on the picture are drawn larger, to carry to someone two metres away.
+  if (params.get('big') !== '0') setReadability(1.45, 1.7);
+
   new TitleCard(hud.root, procedure);
-  new FeedbackToast(hud.root, procedure);
+  // Suture feedback and the captions share the bottom of the screen, stacked.
+  const bottom = add(hud.root, el('div', 'bottom-stack'));
+  new FeedbackToast(bottom, procedure);
   new ScoreCard(hud.root, procedure);
   const vitals = new VitalsPanel(hud.root, procedure);
-  const attending = new AttendingCard(hud.root);
+  const attending = new AttendingCard(bottom);
+  const attract = new AttractScreen(hud.root);
   const sounds = new Sounds();
   if (params.get('sound') === '0') sounds.muted = true;
 
@@ -224,7 +234,8 @@ async function boot(): Promise<void> {
     else if (state === 'thinking') brainChip.set('Attending thinking', 'ok');
     else brainChip.set('Attending answering', 'ok');
   });
-  brain.voice = params.get('voice') === '1';
+  if (params.get('voice') === '0') brain.voice = false;
+  if (params.get('talk') === 'open') brain.talkMode = 'open';
   procedure.on((event) => {
     if (event.type === 'step' || event.type === 'stitch-done' || event.type === 'reset') brain.noteState();
   });
@@ -234,13 +245,47 @@ async function boot(): Promise<void> {
       attending.hide();
       return;
     }
-    if (!config.gemini.configured) {
-      hud.notice('Gemini is not set up: add GEMINI_API_KEY to vision/.env.local and restart the server', 6000);
-      return;
-    }
     void brain.start();
   };
-  if (params.get('attending') === '1' && config.gemini.configured) void brain.start();
+  // At a walk-up table the attending is simply on: connected at launch, microphone gated by the talk button.
+  if (config.gemini.configured && params.get('attending') !== '0') void brain.start();
+
+  // ----- What the operator can do, whichever way they do it: keyboard, presenter, phone remote -----
+  let lastActivity = performance.now();
+  const touch = () => {
+    lastActivity = performance.now();
+    attract.set(false);
+    scene.attract = false;
+  };
+  const resetNow = () => {
+    // Back to Ready at once: no fades, nothing left on screen from the last group.
+    procedure.setAutoplay(false);
+    procedure.reset();
+    brain.silence();
+    attending.hide();
+    view.release();
+    view.snap();
+    hud.snap();
+    renderer.blackout(appTime + 0.6);
+    touch();
+  };
+  const actions = {
+    /** The one button: the next suture if there is one to place, otherwise the next step; after the score, start over. */
+    next: () => {
+      touch();
+      if (procedure.step.id === 'complete') resetNow();
+      else procedure.advance();
+    },
+    back: () => { touch(); procedure.back(); },
+    reset: resetNow,
+    /** Talk button down / up. */
+    talk: (down: boolean) => {
+      touch();
+      if (down) brain.talkDown();
+      else brain.talkUp();
+    },
+  };
+  procedure.on(() => { lastActivity = performance.now(); });
 
   // ----- Input -----
   const input = new InputManager(video, { hololens: config.hololens.configured }, (snapshot) => {
@@ -321,21 +366,25 @@ async function boot(): Promise<void> {
     // A key held down must not run through the procedure: only the first press counts.
     if (event.repeat) { event.preventDefault(); return; }
     sounds.unlock();
+    touch();
     switch (event.key) {
-      // Space and both kinds of clicker (PageDown or right arrow) do the same thing: the next suture if
-      // there is one to place, otherwise the next step. Shift + right arrow skips ahead regardless.
-      case ' ': case 'PageDown': procedure.advance(); break;
-      case 'ArrowRight': if (event.shiftKey) procedure.next(); else procedure.advance(); break;
-      case 'ArrowLeft': case 'PageUp': procedure.back(); break;
+      // Space, and a presenter's forward button (PageDown, or the right arrow on some), are the one button:
+      // the next suture if there is one to place, otherwise the next step. Shift + right arrow skips ahead.
+      case ' ': case 'PageDown': actions.next(); break;
+      case 'ArrowRight': if (event.shiftKey) procedure.next(); else actions.next(); break;
+      case 'ArrowLeft': case 'PageUp': actions.back(); break;
       case 's': case 'S': procedure.startStitch(); break;
-      case 'r': case 'R': procedure.setAutoplay(false); procedure.reset(); break;
+      case 'r': case 'R': actions.reset(); break;
+      // Talk to the attending: hold G (or tap it and speak). A presenter's "blank screen" button sends B or
+      // a full stop, so those do the same. Shift + G turns the attending off and on.
+      case 'g': case 'b': case '.': actions.talk(true); break;
+      case 'G': case 'B': if (event.key === 'G' && event.shiftKey) toggleBrain(); else actions.talk(true); break;
       case 'a': case 'A': procedure.setAutoplay(!procedure.autoplay); break;
       case 'h': case 'H':
         scene.hidden = !scene.hidden;
         hud.setHidden(scene.hidden);
         break;
       case 'n': case 'N': sounds.muted = !sounds.muted; hud.notice(`Sound ${sounds.muted ? 'off' : 'on'}`, 1500); break;
-      case 'g': case 'G': toggleBrain(); break;
       case 'v': case 'V': brain.voice = !brain.voice; hud.notice(`Attending voice ${brain.voice ? 'on' : 'off'}`, 1500); break;
       case 'l': case 'L': hud.notice(brain.sendView() ? 'Picture sent to the attending' : 'The attending is not connected', 1500); break;
       case '1': input.choose('hololens'); break;
@@ -371,6 +420,10 @@ async function boot(): Promise<void> {
       default: return;
     }
     event.preventDefault();
+  });
+
+  window.addEventListener('keyup', (event) => {
+    if (event.key === 'g' || event.key === 'G' || event.key === 'b' || event.key === 'B' || event.key === '.') actions.talk(false);
   });
 
   const startStep = params.get('step') as StepId | null;
@@ -436,6 +489,14 @@ async function boot(): Promise<void> {
   let lastHold = 0;
   let last = performance.now();
   const started = last;
+  // Seconds of quiet before the idle screen, before a finished run resets, and before an abandoned one does.
+  const seconds = (name: string, fallback: number) => {
+    const value = Number(params.get(name));
+    return params.get(name) !== null && Number.isFinite(value) ? value : fallback;
+  };
+  const attractAfter = seconds('attract', 8);
+  const resetAfterDone = seconds('done', 45);
+  const resetAfterIdle = seconds('idle', 180);
   let zoomTarget = 1;
   let wasLocked = false;
   let fps = 60;
@@ -457,6 +518,21 @@ async function boot(): Promise<void> {
     }
 
     procedure.tick(t);
+
+    // The table looks after itself between groups: the idle screen after a few quiet seconds in Ready, and
+    // back to Ready by itself when a finished (or abandoned) run has been left alone.
+    const quiet = (now - lastActivity) / 1000;
+    const busyTalking = brain.state === 'hearing' || brain.state === 'thinking' || brain.state === 'answering';
+    if (busyTalking) lastActivity = now;
+    const showAttract = attractAfter > 0 && !scene.hidden && !procedure.autoplay && !busyTalking
+      && procedure.step.id === 'standby' && quiet > attractAfter;
+    attract.set(showAttract);
+    scene.attract = showAttract;
+    if (!procedure.autoplay && procedure.step.id !== 'standby'
+      && quiet > (procedure.step.id === 'complete' ? resetAfterDone : resetAfterIdle)) {
+      resetNow();
+    }
+    attending.setLevel(brain.talking ? brain.mic.level : 0);
 
     // Zoom toward the wound while planning and stitching, so the fine work fills the screen.
     const pose = tracker.pose;

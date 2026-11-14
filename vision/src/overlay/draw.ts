@@ -25,6 +25,16 @@ export function mix(a: RGB, b: RGB, t: number): RGB {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
 
+// Table mode: lines and lettering drawn on the picture are scaled up so they carry across a room.
+let strokeScale = 1;
+let textScale = 1;
+
+/** Thickness multiplier for every glowing line, and size multiplier for every piece of text on the picture. */
+export function setReadability(lines: number, lettering: number): void {
+  strokeScale = lines;
+  textScale = lettering;
+}
+
 export interface GlowOptions {
   /** Core width in pixels. */
   width?: number;
@@ -47,7 +57,7 @@ export interface GlowOptions {
 
 /** Strokes a path as a glowing line. */
 export function glow(ctx: CanvasRenderingContext2D, path: Path2D, color: RGB, options: GlowOptions = {}): void {
-  const width = options.width ?? 1.6;
+  const width = (options.width ?? 1.6) * strokeScale;
   const alpha = options.alpha ?? 1;
   if (alpha <= 0.003) return;
   const bloom = options.bloom ?? 1;
@@ -170,7 +180,7 @@ export interface TextOptions {
 export function text(ctx: CanvasRenderingContext2D, value: string, x: number, y: number, options: TextOptions = {}): void {
   const alpha = options.alpha ?? 1;
   if (alpha <= 0.003 || !value) return;
-  const size = options.size ?? 12;
+  const size = (options.size ?? 12) * textScale;
   ctx.save();
   ctx.font = `${options.weight ?? 500} ${size}px ${FONTS[options.font ?? 'mono']}`;
   ctx.textAlign = options.align ?? 'center';
@@ -197,7 +207,7 @@ export function text(ctx: CanvasRenderingContext2D, value: string, x: number, y:
 
 /** Width of a string as `text` would draw it. */
 export function measure(ctx: CanvasRenderingContext2D, value: string, options: TextOptions = {}): number {
-  const size = options.size ?? 12;
+  const size = (options.size ?? 12) * textScale;
   ctx.save();
   ctx.font = `${options.weight ?? 500} ${size}px ${FONTS[options.font ?? 'mono']}`;
   (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${((options.tracking ?? 0.06) * size).toFixed(2)}px`;

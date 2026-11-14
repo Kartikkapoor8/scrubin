@@ -26,6 +26,8 @@ export class OverlayRenderer {
   private width = 0;
   private height = 0;
   private ratio = 1;
+  /** App time until which nothing is shown (see blackout). */
+  private blankUntil = -1;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -33,6 +35,14 @@ export class OverlayRenderer {
 
   add(layer: Layer): void {
     this.layers.push(layer);
+  }
+
+  /**
+   * Show nothing for a moment. Used by reset: the layers still run, so their fades finish out of sight,
+   * and the picture is clean at once.
+   */
+  blackout(untilAppTime: number): void {
+    this.blankUntil = untilAppTime;
   }
 
   /** Match the canvas to the stage. Retina sharpness, capped so a 5K display does not cost frame rate. */
@@ -60,6 +70,10 @@ export class OverlayRenderer {
         console.error('[overlay] a layer failed to draw', err);
       }
       ctx.restore();
+    }
+    if (t < this.blankUntil) {
+      ctx.setTransform(this.ratio, 0, 0, this.ratio, 0, 0);
+      ctx.clearRect(0, 0, this.width, this.height);
     }
   }
 }

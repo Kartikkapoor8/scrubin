@@ -39,7 +39,7 @@ export const PROCEDURE = {
     ],
   },
   steps: [
-    { id: 'standby', short: 'RDY', title: 'Standing by', line: 'Bring the wound into view when you are ready.', duration: 4 },
+    { id: 'standby', short: 'RDY', title: 'Ready', line: 'Bring the wound into view, then press Next.', duration: 4 },
     { id: 'scan', short: 'SCN', title: 'Scanning the field', line: 'Welcome to VIPER. Hold still while I scan the field.', duration: 6 },
     { id: 'assess', short: 'ASM', title: 'Assess the wound', line: 'Training Patient 01. A 42 mm laceration on the right forearm. Vitals are stable.', duration: 7 },
     { id: 'anatomy', short: 'ANT', title: 'Know what is underneath', line: 'Check under the skin first. The radial artery runs beside this wound. Avoid the red zone.', duration: 9 },

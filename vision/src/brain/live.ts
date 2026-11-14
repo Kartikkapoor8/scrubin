@@ -26,8 +26,16 @@ export type BrainState = 'off' | 'connecting' | 'listening' | 'hearing' | 'think
 export class AttendingBrain {
   state: BrainState = 'off';
   detail = '';
-  /** Speak the answers aloud as well as showing them. Off by default: speakers near an open mic can echo. */
-  voice = false;
+  /**
+   * Speak the answers aloud as well as showing them. On by default: with push-to-talk the microphone only
+   * reaches Gemini while the talk button is down, so the attending cannot hear, and interrupt, itself.
+   */
+  voice = true;
+  /**
+   * 'push': the microphone reaches Gemini only while the talk button is held (or, after a quick tap, until
+   * the speaker stops). 'open': always listening, with Gemini deciding when someone is talking to it.
+   */
+  talkMode: 'push' | 'open' = 'push';
   readonly mic = new Mic();
 
   private session: Session | null = null;
@@ -50,6 +58,17 @@ export class AttendingBrain {
   private setupSeen = false;
   private failuresAtLevel = 0;
 
+  // Push-to-talk.
+  private gateOpen = false;
+  /** The session was opened with Gemini's own voice detection off: we mark where each question starts and ends. */
+  private manualTurns = false;
+  /** A quick tap rather than a hold: the gate stays open until the speaker falls silent. */
+  private latched = false;
+  private talkStartedAt = 0;
+  private heardAt = 0;
+  private talkTimer = 0;
+  private answerTimer = 0;
+
   // The turn in progress.
   private question = '';
   private answer = '';
@@ -70,6 +89,112 @@ export class AttendingBrain {
     return this.wanted;
   }
 
+  /** True while the microphone is being sent to Gemini. */
+  get talking(): boolean {
+    return this.talkMode === 'open' ? this.session !== null : this.gateOpen;
+  }
+
+  /** Talk button pressed (key, presenter, phone remote). The first press also turns the attending on. */
+  talkDown(): void {
+    this.mic.resume();
+    if (!this.wanted) {
+      void this.start();
+      return;
+    }
+    if (this.talkMode === 'open' || !this.session) return;
+    if (this.latched) {
+      this.closeGate(); // a second tap ends a tapped question
+      return;
+    }
+    if (!this.gateOpen) this.openGate();
+  }
+
+  /** Talk button released. A hold ends the question here; a quick tap leaves it open until the speaker stops. */
+  talkUp(): void {
+    if (!this.gateOpen || this.latched) return;
+    if (performance.now() - this.talkStartedAt >= 350) this.closeGate();
+    else this.latched = true;
+  }
+
+  private openGate(): void {
+    if (!this.session) return;
+    this.player.stop(); // the trainee has the floor
+    this.gateOpen = true;
+    this.latched = false;
+    this.talkStartedAt = performance.now();
+    this.heardAt = 0;
+    window.clearTimeout(this.answerTimer);
+    if (this.manualTurns) {
+      try { this.session.sendRealtimeInput({ activityStart: {} }); } catch { /* socket closing */ }
+    }
+    this.turnActive = false;
+    this.beginTurn();
+    this.card.wake('listening');
+    this.setState('hearing');
+
+    window.clearInterval(this.talkTimer);
+    this.talkTimer = window.setInterval(() => {
+      const now = performance.now();
+      if (this.mic.level > 0.05) this.heardAt = now;
+      const tooLong = now - this.talkStartedAt > 15000;
+      const finished = this.latched && this.heardAt > 0 && now - this.heardAt > 1400;
+      const nobodySpoke = this.latched && this.heardAt === 0 && now - this.talkStartedAt > 6000;
+      if (tooLong || finished || nobodySpoke) this.closeGate();
+    }, 100);
+  }
+
+  private closeGate(): void {
+    window.clearInterval(this.talkTimer);
+    if (!this.gateOpen) return;
+    this.gateOpen = false;
+    this.latched = false;
+    try {
+      // Tell Gemini the question is over, so it answers at once instead of waiting for more.
+      this.session?.sendRealtimeInput(this.manualTurns ? { activityEnd: {} } : { audioStreamEnd: true });
+    } catch { /* socket closing */ }
+    this.card.setState('thinking');
+    this.setState('thinking');
+    // Nothing said, or nothing came back: do not sit on "thinking" for ever.
+    window.clearTimeout(this.answerTimer);
+    this.answerTimer = window.setTimeout(() => {
+      if (this.state === 'thinking') {
+        this.turnActive = false;
+        this.userSpoke = false;
+        this.card.hide();
+        this.setState(this.wanted && this.session ? 'listening' : 'off');
+      }
+    }, 9000);
+  }
+
+  /** Stop speaking and stop listening, now (reset). The session stays connected. */
+  silence(): void {
+    this.player.stop();
+    window.clearTimeout(this.answerTimer);
+    window.clearTimeout(this.thinkTimer);
+    if (this.gateOpen) {
+      window.clearInterval(this.talkTimer);
+      this.gateOpen = false;
+      this.latched = false;
+      try { this.session?.sendRealtimeInput(this.manualTurns ? { activityEnd: {} } : { audioStreamEnd: true }); } catch { /* closing */ }
+    }
+    this.turnActive = false;
+    this.userSpoke = false;
+    if (this.wanted && this.session) this.setState('listening');
+  }
+
+  /** Switch between push-to-talk and an open microphone. Takes effect on a fresh session. */
+  setTalkMode(mode: 'push' | 'open'): void {
+    if (mode === this.talkMode) return;
+    this.closeGate();
+    this.talkMode = mode;
+    if (this.wanted && this.session) {
+      this.generation++;
+      try { this.session.close(); } catch { /* closed */ }
+      this.session = null;
+      void this.connect();
+    }
+  }
+
   private setState(state: BrainState, detail = ''): void {
     this.state = state;
     this.detail = detail;
@@ -84,8 +209,9 @@ export class AttendingBrain {
     this.setState('connecting', 'Opening the microphone');
     try {
       await this.mic.start((chunk) => {
-        // Audio only flows while a session is open; nothing is recorded or kept.
-        if (this.session) {
+        // Audio only flows while a session is open and, with push-to-talk, while the talk button is down.
+        // Nothing is recorded or kept.
+        if (this.session && (this.talkMode === 'open' || this.gateOpen)) {
           try { this.session.sendRealtimeInput({ audio: { data: chunk, mimeType: 'audio/pcm;rate=16000' } }); } catch { /* socket closing */ }
         }
       });
@@ -103,6 +229,10 @@ export class AttendingBrain {
     this.generation++;
     window.clearTimeout(this.retryTimer);
     window.clearTimeout(this.thinkTimer);
+    window.clearTimeout(this.answerTimer);
+    window.clearInterval(this.talkTimer);
+    this.gateOpen = false;
+    this.latched = false;
     this.mic.stop();
     this.player.stop();
     try { this.session?.close(); } catch { /* already closed */ }
@@ -128,7 +258,11 @@ export class AttendingBrain {
     let token = '';
     let model = '';
     this.setupSeen = false;
+    this.gateOpen = false;
+    this.latched = false;
     const level = this.compat;
+    // Marking the start and end of each question ourselves is part of the full setup only.
+    this.manualTurns = level === 0 && this.talkMode === 'push';
     try {
       const res = await fetch(`/api/gemini-token${level >= 1 ? '?lock=0' : ''}`, { method: 'POST', cache: 'no-store' });
       const body = await res.json().catch(() => ({}));
@@ -164,6 +298,7 @@ export class AttendingBrain {
             // Long demos: let the server trim old context instead of ending the session.
             contextWindowCompression: { slidingWindow: {} },
             sessionResumption: this.handle ? { handle: this.handle } : {},
+            ...(this.manualTurns ? { realtimeInputConfig: { automaticActivityDetection: { disabled: true } } } : {}),
           } : level === 1 ? {
             tools: [{ functionDeclarations: toolDeclarations() }],
           } : {}),
@@ -257,6 +392,7 @@ export class AttendingBrain {
   /** Ask a question in text instead of by voice (for testing from the console: __viper.ask('...')). */
   ask(text: string): boolean {
     if (!this.session) return false;
+    this.turnActive = false;
     this.beginTurn();
     this.userSpoke = true;
     this.question = text;
@@ -285,6 +421,7 @@ export class AttendingBrain {
 
   private endTurn(): void {
     window.clearTimeout(this.thinkTimer);
+    window.clearTimeout(this.answerTimer);
     if (this.userSpoke) this.card.finish(9);
     this.turnActive = false;
     this.userSpoke = false;
@@ -304,15 +441,24 @@ export class AttendingBrain {
       }
       this.userSpoke = true;
       this.question += content.inputTranscription.text;
-      this.card.wake('listening', this.question.trim());
-      this.setState('hearing');
       window.clearTimeout(this.thinkTimer);
-      this.thinkTimer = window.setTimeout(() => {
-        if (this.state === 'hearing') {
-          this.card.setState('thinking');
-          this.setState('thinking');
+      if (this.gateOpen || this.talkMode === 'open') {
+        this.card.wake('listening', this.question.trim());
+        this.setState('hearing');
+        // With an open microphone there is no button to say the question is over: assume it is when the
+        // words stop arriving.
+        if (this.talkMode === 'open') {
+          this.thinkTimer = window.setTimeout(() => {
+            if (this.state === 'hearing') {
+              this.card.setState('thinking');
+              this.setState('thinking');
+            }
+          }, 900);
         }
-      }, 900);
+      } else {
+        // The transcript can trail the button: keep "thinking", just fill in the words.
+        this.card.wake('thinking', this.question.trim());
+      }
     }
 
     if (content?.interrupted) {
@@ -324,6 +470,7 @@ export class AttendingBrain {
 
     if (content?.outputTranscription?.text) {
       this.beginTurn();
+      window.clearTimeout(this.answerTimer);
       if (this.userSpoke) {
         this.answer += content.outputTranscription.text;
         window.clearTimeout(this.thinkTimer);

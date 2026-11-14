@@ -65,6 +65,13 @@ export class Viewport {
     this.hasFocus = false;
   }
 
+  /** Jump straight to where the view is heading, with no easing (reset). */
+  snap(): void {
+    this.zoom = this.targetZoom;
+    this.centerX = this.targetX;
+    this.centerY = this.targetY;
+  }
+
   step(dt: number): void {
     const k = damp(2.2, dt);
     this.zoom += (this.targetZoom - this.zoom) * k;

@@ -78,6 +78,11 @@ export class Mic {
     if (this.context.state === 'suspended') await this.context.resume().catch(() => {});
   }
 
+  /** Browsers hold audio back until the first key press or tap: call this from one. */
+  resume(): void {
+    if (this.context && this.context.state === 'suspended') void this.context.resume().catch(() => {});
+  }
+
   stop(): void {
     this.node?.disconnect();
     this.node = null;

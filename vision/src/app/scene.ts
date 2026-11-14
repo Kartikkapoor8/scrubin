@@ -43,6 +43,8 @@ export interface Scene {
   aligned: boolean;
   /** Distance from the working fingertip to the current target in millimetres, or -1 when there is none. */
   toolDistanceMm: number;
+  /** The idle screen is up: layers keep the picture quiet behind it. */
+  attract: boolean;
   /** App time at which the wound-lock brackets should snap in again (set by the scan as it passes the wound). */
   relockAt: number;
   /** A structure the attending is pointing at ('' = none) and the app time the highlight ends. */

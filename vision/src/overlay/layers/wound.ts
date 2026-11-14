@@ -28,7 +28,7 @@ export class WoundLockLayer implements Layer {
     if (this.scene.relockAt > this.lockedAt) this.lockedAt = this.scene.relockAt;
 
     // Nothing found yet: say what the system is doing, quietly, instead of showing an empty picture.
-    const searching = !hidden && step === 'standby' && !pose.locked && pose.confidence < 0.05;
+    const searching = !hidden && !this.scene.attract && step === 'standby' && !pose.locked && pose.confidence < 0.05;
     this.searching += ((searching ? 1 : 0) - this.searching) * (1 - Math.exp(-(searching ? 1.2 : 6) * dt));
     if (this.searching > 0.01) {
       const dots = '.'.repeat(1 + (Math.floor(t * 2) % 3));

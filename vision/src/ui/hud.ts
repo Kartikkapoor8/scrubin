@@ -83,6 +83,12 @@ export class Hud {
     this.help.classList.toggle('help--on', force);
   }
 
+  /** Drop every fade for a moment, so a reset is instant rather than a slow dissolve. */
+  snap(): void {
+    this.root.classList.add('hud--snap');
+    window.setTimeout(() => this.root.classList.remove('hud--snap'), 120);
+  }
+
   setHidden(hidden: boolean): void {
     this.root.classList.toggle('hud--hidden', hidden);
   }

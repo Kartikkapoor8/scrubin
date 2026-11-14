@@ -16,6 +16,7 @@ const STATE_TEXT: Record<AttendingState, string> = {
 export class AttendingCard {
   private root: HTMLDivElement;
   private state: HTMLSpanElement;
+  private meter: HTMLSpanElement;
   private title: HTMLSpanElement;
   private question: HTMLDivElement;
   private shown: HTMLSpanElement;
@@ -34,7 +35,10 @@ export class AttendingCard {
     add(head, el('span', 'attending__orb'));
     add(head, el('span', 'panel__label', 'Attending'));
     this.title = add(head, el('span', 'attending__title'));
-    this.state = add(head, el('span', 'attending__state'));
+    const status = add(head, el('span', 'attending__state'));
+    const meter = add(status, el('span', 'attending__meter'));
+    this.meter = add(meter, el('span', 'attending__meter-fill'));
+    this.state = add(status, el('span'));
     this.question = add(this.root, el('div', 'attending__question'));
     const body = add(this.root, el('div', 'attending__text'));
     this.shown = add(body, el('span'));
@@ -83,17 +87,21 @@ export class AttendingCard {
     }
   }
 
+  /** Microphone loudness, 0..1, shown as a small meter while listening so the speaker can see they are heard. */
+  setLevel(level: number): void {
+    this.meter.style.width = `${Math.round(Math.min(1, Math.max(0, level)) * 100)}%`;
+  }
+
   /** Bring the card up with a status and the question so far (while Gemini is listening or thinking). */
   wake(state: AttendingState, question = ''): void {
-    if (question) {
-      this.setQuestion(question);
-      // A new question: the previous answer no longer belongs on the card.
-      if (!this.open && this.count >= this.full.length) {
-        this.full = '';
-        this.count = 0;
-        this.title.textContent = '';
-        this.render();
-      }
+    if (question) this.setQuestion(question);
+    // A new question (or the talk button going down): the previous answer no longer belongs here.
+    if (state === 'listening' && !this.open && this.count >= this.full.length && this.full !== '') {
+      this.full = '';
+      this.count = 0;
+      this.title.textContent = '';
+      if (!question) this.setQuestion('');
+      this.render();
     }
     this.setState(state);
   }
