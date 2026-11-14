@@ -7,7 +7,8 @@
 #   status   on/off, network name, band, connected devices (password only with -ShowPassword, so it never
 #            appears on a projector by accident)
 #   on       turns the hotspot on, sharing the current internet connection (-FiveGHz asks for 5 GHz if supported)
-#   find     checks every device on the hotspot (192.168.137.x) for a Device Portal on port 443 = the HoloLens.
+#   find     checks every device on the hotspot (192.168.137.x, or the phone hotspot the laptop is on if that's a
+#            small /24 network) for a Device Portal on port 443 = the HoloLens.
 #            -Save writes HOLOLENS_IP into tools\.env.local (other lines, e.g. credentials, are left untouched).
 # Uses the Windows.Networking.NetworkOperators tethering API (same as Settings > Mobile hotspot).
 
@@ -37,13 +38,28 @@ function Get-TetheringManager {
     [Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager]::CreateFromConnectionProfile($connProfile)
 }
 
-function Get-HotspotClients {
-    # Devices that have talked to the laptop on the hotspot subnet (ARP / neighbor table).
+function Get-HotspotClients([string]$prefix = '192.168.137', [string]$self = '192.168.137.1') {
+    # Devices that have talked to the laptop on that /24 (ARP / neighbor table).
     Get-NetNeighbor -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Where-Object { $_.IPAddress -like '192.168.137.*' -and $_.IPAddress -ne '192.168.137.1' -and
-                       $_.IPAddress -ne '192.168.137.255' -and $_.State -ne 'Unreachable' -and
+        Where-Object { $_.IPAddress -like "$prefix.*" -and $_.IPAddress -ne $self -and
+                       $_.IPAddress -ne "$prefix.255" -and $_.State -ne 'Unreachable' -and
                        $_.LinkLayerAddress -and $_.LinkLayerAddress -ne 'FF-FF-FF-FF-FF-FF' } |
         Sort-Object IPAddress -Unique
+}
+
+# Which /24 to search: the laptop's own hotspot if it's on, otherwise the network the laptop is joined to
+# (e.g. a phone hotspot), but only if that network is small (/24 or smaller). Never sweeps a big campus network.
+function Get-SearchNet {
+    $hs = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -like '192.168.137.*' } | Select-Object -First 1
+    if ($hs) { return @{ Prefix = '192.168.137'; Self = $hs.IPAddress; Name = 'laptop hotspot' } }
+    $prof = Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Connectivity -ne 'Disconnected' } | Select-Object -First 1
+    if (-not $prof) { return $null }
+    $ip = Get-NetIPAddress -InterfaceIndex $prof.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $ip -or $ip.PrefixLength -lt 24) {
+        Write-Host ("'{0}' is a large network (/{1}); not scanning it. Read the HoloLens IP on the headset: Settings > Network & Internet > Wi-Fi > Advanced options." -f $prof.Name, $ip.PrefixLength) -ForegroundColor Yellow
+        return $null
+    }
+    return @{ Prefix = (($ip.IPAddress -split '\.')[0..2] -join '.'); Self = $ip.IPAddress; Name = "'$($prof.Name)'" }
 }
 
 function Show-Status($tm) {
@@ -83,12 +99,15 @@ switch ($Action) {
     }
     'find' {
         # Wake up the neighbor table: one ping sweep of likely addresses (Windows hands out .2-.254).
-        $clients = @(Get-HotspotClients)
+        $net = Get-SearchNet
+        if (-not $net) { throw 'No small network to search. Turn on the laptop hotspot (tools\run hotspot on) or join the phone hotspot.' }
+        Write-Host "Searching $($net.Name) ($($net.Prefix).x)..." -ForegroundColor DarkGray
+        $clients = @(Get-HotspotClients $net.Prefix $net.Self)
         if ($clients.Count -eq 0) {
-            Write-Host 'No devices seen yet; sweeping 192.168.137.2-254 (about 10 s)...' -ForegroundColor DarkGray
-            $pings = foreach ($i in 2..254) { (New-Object Net.NetworkInformation.Ping).SendPingAsync("192.168.137.$i", 300) }
+            Write-Host "No devices seen yet; sweeping $($net.Prefix).1-254 (about 10 s)..." -ForegroundColor DarkGray
+            $pings = foreach ($i in 1..254) { if ("$($net.Prefix).$i" -ne $net.Self) { (New-Object Net.NetworkInformation.Ping).SendPingAsync("$($net.Prefix).$i", 300) } }
             try { [Threading.Tasks.Task]::WaitAll($pings) } catch {}
-            $clients = @(Get-HotspotClients)
+            $clients = @(Get-HotspotClients $net.Prefix $net.Self)
         }
         $found = $null
         foreach ($c in $clients) {

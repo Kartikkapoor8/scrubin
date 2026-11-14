@@ -287,7 +287,7 @@ namespace ScrubIn
             {
                 string[] words = new string[_commands.Count];
                 _commands.Keys.CopyTo(words, 0);
-                _keywords = new KeywordRecognizer(words, ConfidenceLevel.Low);
+                _keywords = new KeywordRecognizer(words, ConfidenceLevel.Medium);
                 _keywords.OnPhraseRecognized += OnPhrase;
                 _keywords.Start();
             }

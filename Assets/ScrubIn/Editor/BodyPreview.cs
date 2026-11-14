@@ -45,6 +45,12 @@ namespace ScrubIn.EditorTools
                 Shoot(cam, model, BodyMode.XRay, "5-xray", center + new Vector3(0f, 0.95f, -1.25f), center, 55f, rt);
                 Shoot(cam, model, BodyMode.Skin, "6-forearm-window", new Vector3(0.12f, 0.45f, -0.30f), new Vector3(0.12f, 0.0f, 0.0f), 40f, rt);
                 Shoot(cam, model, BodyMode.XRay, "7-top-down", new Vector3(-0.02f, 2.2f, -0.24f), center, 50f, rt, Vector3.right);
+                // Selection + hover look (what an air tap / gaze does).
+                BodyPart heart = model.Parts.Find(p => p.DisplayName == "Heart");
+                BodyPart femur = model.Parts.Find(p => p.DisplayName == "Femur (right)");
+                if (heart != null) heart.SetSelected(true);
+                if (femur != null) femur.SetHover(true);
+                Shoot(cam, model, BodyMode.XRay, "8-selected-heart-hover-femur", new Vector3(0.20f, 0.70f, -0.95f), new Vector3(0.10f, 0.03f, -0.20f), 50f, rt);
             }
             finally
             {
