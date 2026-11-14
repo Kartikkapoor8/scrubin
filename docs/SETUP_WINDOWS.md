@@ -4,6 +4,12 @@ The repo is created on a machine without Unity, so it ships **without** `Project
 `Packages/manifest.json`. They come from the working rig (`C:\dev\anon-glass`), whose XR, remoting and UWP
 settings are already proven on the HoloLens.
 
+> **Windows laptop (current setup, no rig):** `ProjectSettings/` are committed now. After cloning, open in Unity
+> 2019.4.40f1 and run **ScrubIn ▸ Setup Project**. It applies every section B setting itself (also available
+> alone as **ScrubIn ▸ Apply HoloLens Settings**; verify with **ScrubIn ▸ Check HoloLens Settings**). For an
+> on-device build: close Unity, then `tools\ship.ps1` (pull + build + install + launch). `tools\doctor.ps1`
+> checks the machine.
+
 ## A. With the rig on this machine (recommended, about 5 minutes)
 
 1. Clone: `git clone https://github.com/Kartikkapoor8/scrubin.git C:\dev\ScrubIn`

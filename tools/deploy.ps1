@@ -1,20 +1,22 @@
 # deploy.ps1 -- install the built .appx on the HoloLens and launch it.
 #
-# Usage:   powershell -ExecutionPolicy Bypass -File tools\deploy.ps1 [-Package <path.appx>] [-NoLaunch]
+# Usage:   powershell -ExecutionPolicy Bypass -File tools\deploy.ps1 [-Package <path.appx>] [-NoLaunch] [-Uninstall]
 #          Default package = the one tools\build.ps1 produced last (tools\.last-package).
+#          Updates in place (no uninstall) unless -Uninstall is given or the device rejects the update.
 # Needs:   HOLOLENS_IP, HOLOLENS_USER, HOLOLENS_PASS in the environment or tools\.env.local (gitignored).
 #          Kartik sets the credentials himself; this script never prints them.
 #
 # Path 1 (default): Windows Device Portal REST API (docs: learn.microsoft.com .../device-portal-api-reference)
 #   GET    /api/app/packagemanager/packages          find the old install
-#   DELETE /api/app/packagemanager/package?package=<PackageFullName>   uninstall it
+#   DELETE /api/taskmanager/app?package=<hex64>&forcestop=yes          stop it if running
+#   DELETE /api/app/packagemanager/package?package=<PackageFullName>   uninstall (only if needed)
 #   POST   /api/app/packagemanager/package?package=<file.appx>         multipart upload (+ dependencies, .cer)
 #   GET    /api/app/packagemanager/state             poll until done
 #   POST   /api/taskmanager/app?appid=<hex64>&package=<hex64>          launch
 #   (state-changing calls send the CSRF-Token cookie back as X-CSRF-Token; cert trust is scoped to HOLOLENS_IP)
 # Path 2 (fallback): WinAppDeployCmd install -file ... -ip ... [-pin $env:HOLOLENS_PIN]
 
-param([string]$Package, [switch]$NoLaunch, [switch]$ForceFallback)
+param([string]$Package, [switch]$NoLaunch, [switch]$Uninstall, [switch]$ForceFallback)
 
 . "$PSScriptRoot\_common.ps1"
 Import-ScrubInEnv
@@ -49,15 +51,31 @@ function Find-Installed {
     $list.InstalledPackages | Where-Object { $_.PackageFamilyName -like "$identity`_*" -or $_.Name -eq $identity } | Select-Object -First 1
 }
 
-function Deploy-Rest {
-    $base = Get-DPBase; $cred = Get-DPCredential
-    $null = Invoke-DP -Path '/api/os/info'   # primes session + CSRF cookie
+function Uninstall-Rest($old) {
+    Write-Host "Uninstalling: $($old.PackageFullName)" -ForegroundColor Yellow
+    $null = Invoke-DP -Method DELETE -Path '/api/app/packagemanager/package' -Query @{ package = $old.PackageFullName } -TimeoutSec 120
+}
 
+# Default: update in place (faster; build.ps1 bumps the version every build). The running app is stopped
+# first. If the device rejects the update (e.g. signing cert changed), uninstall and install once more.
+function Deploy-Rest {
+    $null = Invoke-DP -Path '/api/os/info'   # primes session + CSRF cookie
     $old = Find-Installed
     if ($old) {
-        Write-Host "Uninstalling old: $($old.PackageFullName)" -ForegroundColor Yellow
-        $null = Invoke-DP -Method DELETE -Path '/api/app/packagemanager/package' -Query @{ package = $old.PackageFullName } -TimeoutSec 120
+        try { $null = Invoke-DP -Method DELETE -Path '/api/taskmanager/app' -Query @{ package = (ConvertTo-Hex64 $old.PackageFullName); forcestop = 'yes' } } catch {}
+        if ($Uninstall) { Uninstall-Rest $old; $old = $null }
     }
+    try { Install-Rest }
+    catch {
+        if (-not $old) { throw }
+        Write-Host "Update in place failed ($($_.Exception.Message)); uninstalling and retrying once." -ForegroundColor Yellow
+        Uninstall-Rest $old
+        Install-Rest
+    }
+}
+
+function Install-Rest {
+    $base = Get-DPBase; $cred = Get-DPCredential
 
     # Multipart upload with HttpClient (PS 5.1's Invoke-WebRequest has no -Form).
     $files = @($Package)

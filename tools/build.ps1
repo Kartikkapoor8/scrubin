@@ -3,9 +3,12 @@
 # Usage:   powershell -ExecutionPolicy Bypass -File tools\build.ps1 [-SkipUnity] [-Configuration Release]
 #            -SkipUnity      reuse the UWP solution already in C:\b\scrubin (e.g. after "ScrubIn/Build HoloLens (x86)")
 #            -Toolset v143   force an MSVC toolset (only needed if VS 2019 is missing and VS 2022 is used)
+#          Never cleans: always builds into the same C:\b\scrubin so IL2CPP + MSBuild stay incremental.
+#          Bumps the package version each build so deploy.ps1 can update in place without uninstalling.
+#          Delete C:\b\scrubin by hand only if a build gets into a broken state.
 #
 # Steps: 1) refuse if the project is open in the Unity Editor (batch mode would fail)
-#        2) Unity batch mode -> ScrubIn.HoloLensBuild.BuildBatch -> UWP solution in C:\b\scrubin
+#        2) Unity batch mode -> ScrubIn.EditorTools.BuildScript.BuildBatch -> UWP solution in C:\b\scrubin
 #        3) MSBuild Release|x86 -> sideload .appx (+ dependencies + .cer) under C:\b\scrubin\<Product>\AppPackages
 # Prints the package path and total time. Unity log: C:\b\scrubin-unity.log
 
@@ -52,8 +55,11 @@ if (-not $SkipUnity) {
     New-Item -ItemType Directory -Force (Split-Path $OutDir -Parent) | Out-Null
     Write-Host "[1/2] Unity batch build -> $OutDir  (log: $log)" -ForegroundColor Cyan
     $args1 = @('-batchmode', '-quit', '-projectPath', $Repo, '-buildTarget', 'WSAPlayer',
-               '-executeMethod', 'ScrubIn.HoloLensBuild.BuildBatch', '-buildPath', $OutDir, '-logFile', $log)
-    $p = Start-Process -FilePath $unity -ArgumentList $args1 -Wait -PassThru -NoNewWindow
+               '-executeMethod', 'ScrubIn.EditorTools.BuildScript.BuildBatch', '-buildPath', $OutDir, '-logFile', $log)
+    # WaitForExit, NOT Start-Process -Wait: -Wait also waits for Unity's lingering child processes (licensing
+    # client, shader compiler), which added ~9 minutes per build.
+    $p = Start-Process -FilePath $unity -ArgumentList $args1 -PassThru -NoNewWindow
+    $p.WaitForExit()
     if ($p.ExitCode -ne 0) {
         Write-Host '--- last Unity log lines ---' -ForegroundColor Yellow
         Get-Content $log -Tail 40 | ForEach-Object { Write-Host $_ }
@@ -65,6 +71,20 @@ if (-not $SkipUnity) {
 # ---- 3: MSBuild -> .appx
 $sln = Get-ChildItem $OutDir -Filter *.sln -File | Select-Object -First 1
 if (-not $sln) { throw "No .sln in $OutDir -- run without -SkipUnity first." }
+# Bump the package version every build so deploy.ps1 can update in place (no uninstall). Unity does not
+# rewrite Package.appxmanifest when building into an existing folder, so edit it here.
+# Version = 1.0.<days since 2026-01-01>.<seconds today / 2>: always increasing, each part < 65535.
+$manifest = Get-ChildItem $OutDir -Directory | ForEach-Object { Join-Path $_.FullName 'Package.appxmanifest' } |
+            Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($manifest) {
+    $now = Get-Date
+    $ver = '1.0.{0}.{1}' -f [int]($now.Date - [datetime]'2026-01-01').TotalDays, [int]($now.TimeOfDay.TotalSeconds / 2)
+    $xmlText = [IO.File]::ReadAllText($manifest)
+    $xmlText = [regex]::Replace($xmlText, '(<Identity\b[^>]*?\bVersion=")[^"]+(")', ('${1}' + $ver + '${2}'))
+    [IO.File]::WriteAllText($manifest, $xmlText, (New-Object Text.UTF8Encoding($true)))
+    Write-Host "      package version $ver" -ForegroundColor DarkGray
+}
+
 $mb = Find-MSBuild
 if ($Toolset) { $mb.Toolset = $Toolset }
 Write-Host "[2/2] MSBuild $($sln.Name) $Configuration|x86 $(if ($mb.Toolset) { '(toolset ' + $mb.Toolset + ')' })" -ForegroundColor Cyan
