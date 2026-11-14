@@ -1,0 +1,4 @@
+# secrets + local output -- never commit
+.env.local
+.last-package
+captures/
