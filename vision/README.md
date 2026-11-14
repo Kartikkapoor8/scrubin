@@ -66,10 +66,16 @@ whether or not it is aligned.
 | Standing by | The wound is found and bracketed: "Wound locked". |
 | Scan | A scan line sweeps the picture; a second pass leaves contour arcs over the arm. |
 | Assess | The wound is measured: extension lines, a dimension line, "42 mm". |
-| Anatomy | (milestone 5) Arteries, veins, nerve and tendons laid along the arm; the danger zone. |
+| Anatomy | A scan line runs wrist to elbow and the anatomy appears behind it: radial and ulnar arteries in red with blood pulsing toward the hand, superficial veins in blue, the median nerve in yellow, flexor tendons in white, each labelled on a leader. A hatched red **danger zone** marks the radial artery beside the wound. |
 | Plan | Five numbered targets with entry and exit points, the 8 mm spacing ruler, the 5 mm bite. The view zooms in. |
 | Stitch | One suture per press: the target tightens, a curved needle passes under the wound, the thread is pulled flat, the knot pops, the suture turns green with a burst and "Suture 3/5 · spacing 7.9 mm ✓ · depth ✓". The Attending comments on each. |
 | Complete | The view pulls back; the score card fills: sutures, average spacing, depth, time. |
+
+From Assess onward the **vitals panel** (top right) shows a sweeping ECG, heart rate, blood pressure and SpO2.
+The danger zone stays on, dashed, through Plan and Stitch. The anatomy is a teaching diagram laid out in
+millimetres from the wound (`src/overlay/layers/anatomy.ts`), not a scan of the real arm; it assumes the
+wound is drawn along the forearm, about 12 cm from the wrist, with the thumb side on the far side of the
+picture (`Z` flips the side, `X` flips wrist and elbow).
 
 Wording, counts and timings live in `src/procedure/data.ts`. **Autoplay** (`A`) runs the whole thing hands-free
 for recording, and stops on the score card; `?autoplay=1` in the address starts it at launch. Sounds are
@@ -152,3 +158,30 @@ headless Chrome and saves screenshots to `vision/shots/`.
 | MediaPipe Tasks Vision and the Hand Landmarker model | Apache 2.0 |
 | `@google/genai` | Apache 2.0 |
 | Vite, TypeScript, Playwright (development only) | MIT / Apache 2.0 |
+
+## Before going on stage
+
+1. `npm run build && npm start`, open http://localhost:4747 in Chrome, press `F`.
+2. Press `1` (HoloLens). If the chip does not go green in a few seconds, `2` (webcam) or `3` (a recorded clip in
+   `vision/media/`) or `4` (simulated arm) keep the show going; `1` again retries.
+3. Check the chip says **Wound locked** with the real marker under the real light. If it does not: `K` and
+   click the marker line; `D` shows what the tracker sees.
+4. Step to Anatomy and Plan once. If the anatomy is mirrored or back to front for where the patient sits,
+   press `Z` or `X`. If targets look too wide or too narrow across the arm, `[` or `]`. These are remembered.
+5. `G` for the attending, ask one question, wait for the card. `R` to reset. You are ready.
+
+If something goes wrong mid-demo: `R` resets the procedure, `H` shows the clean picture, and reloading the
+page takes about two seconds (settings are kept).
+
+## Layout of the code
+
+| Folder | What is in it |
+|--------|---------------|
+| `server/` | The local server: stream relay, Gemini token route, static files. |
+| `src/input/` | The four picture sources and the switcher with its fallback rules. |
+| `src/tracking/` | Wound detection and smoothing; MediaPipe hands. |
+| `src/procedure/` | The step script (`data.ts`) and the state machine every control goes through. |
+| `src/overlay/` | The canvas overlays: glow primitives, wound space, one file per layer in `layers/`. |
+| `src/ui/` | The DOM panels: brand and chips, step panel, vitals, Attending card, feedback line, score card. |
+| `src/brain/` | The Gemini attending: microphone, Live session, tools. |
+| `dev/` | Mock HoloLens Device Portal and the headless screenshot script. |

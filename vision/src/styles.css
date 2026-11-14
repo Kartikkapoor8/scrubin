@@ -816,3 +816,84 @@ body {
   line-height: 1.42;
   color: var(--text-dim);
 }
+
+/* ---------- Vitals (top right) ---------- */
+
+.vitals {
+  top: calc(var(--u) * 3.2);
+  right: calc(var(--u) * 3.6);
+  width: calc(var(--u) * 37);
+}
+
+.vitals__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(var(--u) * 1);
+}
+
+.vitals__patient {
+  font-family: var(--font-mono);
+  font-size: calc(var(--u) * 0.95);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.vitals__ecg {
+  display: block;
+  width: 100%;
+  height: calc(var(--u) * 6.4);
+  margin-top: calc(var(--u) * 0.9);
+  filter: drop-shadow(0 0 calc(var(--u) * 0.5) rgba(var(--green-rgb), 0.75));
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px) 0 0 / 100% calc(var(--u) * 1.6),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px) 0 0 / calc(var(--u) * 1.6) 100%;
+}
+
+.vitals__row {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr 1fr;
+  gap: calc(var(--u) * 1.2);
+  margin-top: calc(var(--u) * 1);
+  padding-top: calc(var(--u) * 1);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.vitals__key {
+  font-family: var(--font-mono);
+  font-size: calc(var(--u) * 0.92);
+  letter-spacing: 0.18em;
+  color: var(--text-dim);
+}
+
+.vitals__line {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--u) * 0.5);
+  margin-top: calc(var(--u) * 0.2);
+}
+
+.vitals__value {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: calc(var(--u) * 2.5);
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.vitals__cell--green .vitals__value { color: var(--green); }
+.vitals__cell--cyan .vitals__value { color: var(--cyan); }
+
+.vitals__unit {
+  font-family: var(--font-mono);
+  font-size: calc(var(--u) * 0.92);
+  color: var(--text-faint);
+}
+
+/* Full screen for an audience: no mouse pointer unless it is being used. */
+.stage--idle {
+  cursor: none;
+}

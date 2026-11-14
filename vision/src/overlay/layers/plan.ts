@@ -85,9 +85,10 @@ export class PlanLayer implements Layer {
       });
     }
 
-    // Spacing ruler on the far side: a tick above every suture and the distance between neighbours.
+    // Spacing ruler on the near side, below the numbers (the far side belongs to the danger zone): a tick
+    // under every suture and the distance between neighbours.
     if (rulerOn > 0.003) {
-      const across = biteMm + 5.2;
+      const across = -(biteMm + 9.4);
       const first = sutureOffsetMm(0);
       const last = sutureOffsetMm(count - 1);
       const draw = this.ruler.part(t, 0.9, 0.7);
@@ -104,7 +105,7 @@ export class PlanLayer implements Layer {
         });
       }
       const labelAlpha = rulerOn * this.ruler.part(t, 1.5, 0.5);
-      const [lx, ly] = w.point((first + sutureOffsetMm(1)) / 2, across + 3.6);
+      const [lx, ly] = w.point((first + sutureOffsetMm(1)) / 2, across - 3.6);
       text(ctx, `${spacingMm} mm`, lx, ly, { size: clamp(2.3 * px, 10, 14), color: C.cyan, alpha: labelAlpha, weight: 600 });
 
       // Bite: how far from the wound edge the needle goes in, shown once, beside the first suture.

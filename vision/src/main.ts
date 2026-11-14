@@ -11,6 +11,7 @@ import type { SourceKind } from './input/types';
 import { Sounds } from './app/audio';
 import { AttendingBrain } from './brain/live';
 import type { BrainHost, Structure } from './brain/tools';
+import { AnatomyLayer } from './overlay/layers/anatomy';
 import { DebugLayer } from './overlay/layers/debug';
 import { HandLayer } from './overlay/layers/hand';
 import { MeasureLayer } from './overlay/layers/measure';
@@ -28,6 +29,7 @@ import { FeedbackToast } from './ui/feedback';
 import { Hud } from './ui/hud';
 import { ScoreCard } from './ui/score';
 import { StepPanel } from './ui/steps';
+import { VitalsPanel } from './ui/vitals';
 
 interface ServerConfig {
   hololens: { configured: boolean; target: string };
@@ -110,6 +112,7 @@ async function boot(): Promise<void> {
   };
 
   renderer.add(new ScanLayer(scene));
+  renderer.add(new AnatomyLayer(scene));
   renderer.add(new WoundLockLayer(scene));
   renderer.add(new MeasureLayer(scene));
   renderer.add(new PlanLayer(scene));
@@ -120,6 +123,7 @@ async function boot(): Promise<void> {
   new StepPanel(hud.root, procedure);
   new FeedbackToast(hud.root, procedure);
   new ScoreCard(hud.root, procedure);
+  const vitals = new VitalsPanel(hud.root, procedure);
   const attending = new AttendingCard(hud.root);
   const sounds = new Sounds();
   if (params.get('sound') === '0') sounds.muted = true;
@@ -297,6 +301,8 @@ async function boot(): Promise<void> {
   };
 
   window.addEventListener('pointerdown', () => sounds.unlock());
+  let lastPointer = performance.now();
+  window.addEventListener('pointermove', () => { lastPointer = performance.now(); });
   window.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     sounds.unlock();
@@ -394,6 +400,8 @@ async function boot(): Promise<void> {
     procedure: () => ({ step: procedure.step.id, stitchesDone: procedure.stitchesDone, stitching: procedure.stitch?.index ?? null, autoplay: procedure.autoplay }),
     attending: () => ({ state: brain.state, detail: brain.detail, voice: brain.voice, highlight: scene.highlight.structure }),
     view: () => ({ zoom: +view.zoom.toFixed(2), fit: view.fit }),
+    marker: () => scene.marker,
+    fps: () => ({ fps: +fps.toFixed(1), worstFrameMs: +worstFrame.toFixed(1) }),
   };
   (window as unknown as { __viper: unknown }).__viper = {
     parts: debug,
@@ -412,12 +420,18 @@ async function boot(): Promise<void> {
   const started = last;
   let zoomTarget = 1;
   let wasLocked = false;
+  let fps = 60;
+  let worstFrame = 0;
+  let worstResetAt = 0;
 
   const frame = (now: number) => {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     const t = (now - started) / 1000;
     appTime = t;
+    if (dt > 0) fps += (1 / dt - fps) * 0.05;
+    if (now - worstResetAt > 3000) { worstResetAt = now; worstFrame = 0; }
+    worstFrame = Math.max(worstFrame, dt * 1000);
 
     if (!frameCallbacks && video.currentTime !== lastVideoTime) {
       lastVideoTime = video.currentTime;
@@ -459,6 +473,8 @@ async function boot(): Promise<void> {
 
     renderer.resize(stage.clientWidth, stage.clientHeight);
     renderer.draw(t, dt, view);
+    vitals.update(t, dt);
+    stage.classList.toggle('stage--idle', now - lastPointer > 2500 && !picking);
 
     if (pose.locked && !wasLocked && step === 'standby') sounds.lock();
     wasLocked = pose.locked;

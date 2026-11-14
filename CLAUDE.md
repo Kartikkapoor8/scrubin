@@ -24,6 +24,25 @@ The beautiful overlays and Gemini moved **off the HoloLens and onto the Mac**.
 The marker wound on the real forearm is drawn in a **bright saturated green** (configurable in VIPER Vision),
 which is what the Mac tracks. The HoloLens app therefore draws nothing over the wound once the outline is placed.
 
+### VIPER Vision in one screen (details in `vision/README.md`)
+
+- **Stack:** TypeScript + Vite, no framework. Canvas for everything pinned to the picture, DOM for the HUD
+  panels. A small Node server (`vision/server/`) relays the HoloLens stream and issues Gemini tokens; it binds
+  to 127.0.0.1 only and holds every secret (`vision/.env.local`, gitignored).
+- **Run:** `cd vision && npm install && npm run dev` (http://localhost:4747). On stage: `npm run build && npm start`.
+- **Inputs:** `1` HoloLens stream, `2` webcam, `3` video file, `4` simulated arm. A dropped stream holds the
+  last frame, says "reconnecting" and comes back by itself; overlays stay up.
+- **Tracking:** marker colour + line fit gives the wound's position, direction and scale; every overlay is
+  drawn in millimetres from the wound centre (`src/overlay/space.ts`). MediaPipe hands gives "Aligned".
+- **One state machine** (`src/procedure/machine.ts`) is driven by keys, clicker, autoplay and Gemini's tools.
+  All wording is in `src/procedure/data.ts`.
+- **Rules for the look:** brand colours only (cyan #3FE0FF, white, near-black, green #4DFFB0, amber #FFB547,
+  red #FF4D5E; blue and yellow only for veins and nerve), Space Grotesk / Inter / JetBrains Mono, thin glowing
+  lines with a dark halo so they read on skin, and nothing pops: every element eases or traces in
+  (`Appear` in `src/app/scene.ts`). The corner label "Trainee view · concept" is always visible.
+- **Checking it:** `npm run check` (types), then `node dev/shot.mjs ...` for headless-Chrome screenshots, and
+  `node dev/mock-hololens.mjs` for a fake headset stream. Look at the screenshots before pushing.
+
 **Who does what (since Saturday afternoon):**
 - **Kartik's agent** (on a Mac with no Unity) writes all the Unity runtime code: Core, Visuals, Anatomy, Attending,
   and `procedure.json`. It compile-checks against the Unity 2019.4 assemblies before every push.

@@ -156,6 +156,8 @@ export class WoundDetector {
     const nearX = near ? near.x / scale : 0;
     const nearY = near ? near.y / scale : 0;
     const minPixels = Math.max(10, Math.round((w / 960) * (w / 960) * 26));
+    const maxPixels = Math.round(mask.length * 0.012);
+    const maxThickness = h * 0.035;
     const stack = this.stack;
     let best: { score: number; n: number; mx: number; my: number; angle: number; l1: number; l2: number; start: number; end: number } | null = null;
     let cursor = 0; // blobs' pixel indices are kept back to back in `stack`
@@ -186,6 +188,8 @@ export class WoundDetector {
       }
       cursor = end;
       if (n < minPixels) continue;
+      // A drawn line is a small thing. A big patch of the marker's colour (a drape, a sleeve) is not it.
+      if (n > maxPixels) continue;
 
       const mx = sx / n;
       const my = sy / n;
@@ -197,6 +201,7 @@ export class WoundDetector {
       const l2 = Math.max(1e-3, (cxx + cyy) / 2 - spread); // variance across it
       const elongation = Math.sqrt(l1 / l2);
       if (elongation < 2.2) continue; // not a line
+      if (Math.sqrt(12 * l2) > maxThickness) continue; // far too thick to be a marker stroke
 
       let score = n * Math.min(elongation, 12);
       if (near) {
