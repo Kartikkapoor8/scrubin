@@ -41,9 +41,11 @@ function Test-ProjectOpen {
 function Find-MSBuild {
     $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
     $m = & $vswhere -products * -version '[16.0,17.0)' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
-    if ($m) { return @{ Path = $m; Toolset = '' } }
+    # Always force the toolset that matches this MSBuild: Unity's "Latest installed" can pick v143 when a newer
+    # VS (e.g. 2026 Build Tools) is also present, and VS 2019 cannot build v143.
+    if ($m) { return @{ Path = $m; Toolset = 'v142' } }
     $m = & $vswhere -products * -version '[17.0,18.0)' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
-    if ($m) { return @{ Path = $m; Toolset = 'v143' } }   # VS 2022: retarget Unity's v142 project
+    if ($m) { return @{ Path = $m; Toolset = 'v143' } }
     throw 'No VS 2019/2022 MSBuild found. Run tools\doctor.ps1.'
 }
 
@@ -59,6 +61,7 @@ if (-not $SkipUnity) {
     # WaitForExit, NOT Start-Process -Wait: -Wait also waits for Unity's lingering child processes (licensing
     # client, shader compiler), which added ~9 minutes per build.
     $p = Start-Process -FilePath $unity -ArgumentList $args1 -PassThru -NoNewWindow
+    $null = $p.Handle   # PS 5.1 quirk: without touching Handle first, ExitCode comes back empty
     $p.WaitForExit()
     if ($p.ExitCode -ne 0) {
         Write-Host '--- last Unity log lines ---' -ForegroundColor Yellow
@@ -85,12 +88,33 @@ if ($manifest) {
     Write-Host "      package version $ver" -ForegroundColor DarkGray
 }
 
+# Unity references the WindowsMobile extension SDK at the target SDK version. Newer SDKs (10.0.26100) don't ship
+# it (MSB3774). Retarget the generated app project to the newest SDK whose WindowsMobile extension exists.
+# (Unity does not rewrite this file on rebuilds into an existing folder, so patching here keeps builds incremental.)
+$extRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\Extension SDKs\WindowsMobile"
+$mobileVer = Get-ChildItem $extRoot -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^10\.0\.\d+\.\d+$' } |
+             Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1 -ExpandProperty Name
+foreach ($proj in Get-ChildItem $OutDir -Directory | ForEach-Object { Get-ChildItem $_.FullName -Filter *.vcxproj -File }) {
+    $t = [IO.File]::ReadAllText($proj.FullName)
+    $m = [regex]::Match($t, 'SDKReference Include="WindowsMobile, Version=([^"]+)"')
+    if ($m.Success -and $mobileVer -and -not (Test-Path (Join-Path $extRoot $m.Groups[1].Value))) {
+        $t = $t.Replace($m.Value, 'SDKReference Include="WindowsMobile, Version=' + $mobileVer + '"')
+        $t = [regex]::Replace($t, '<WindowsTargetPlatformVersion>[^<]+</WindowsTargetPlatformVersion>', "<WindowsTargetPlatformVersion>$mobileVer</WindowsTargetPlatformVersion>")
+        [IO.File]::WriteAllText($proj.FullName, $t, (New-Object Text.UTF8Encoding($true)))
+        Write-Host "      retargeted $($proj.Name) to SDK $mobileVer (WindowsMobile extension)" -ForegroundColor DarkGray
+    }
+}
+
 $mb = Find-MSBuild
 if ($Toolset) { $mb.Toolset = $Toolset }
 Write-Host "[2/2] MSBuild $($sln.Name) $Configuration|x86 $(if ($mb.Toolset) { '(toolset ' + $mb.Toolset + ')' })" -ForegroundColor Cyan
-$mbArgs = @($sln.FullName, '/m', '/nologo', '/v:minimal', '/restore',
+$mbArgs = @($sln.FullName, '/m', '/nologo', '/v:minimal',
             "/p:Configuration=$Configuration", '/p:Platform=x86',
-            '/p:AppxBundle=Never', '/p:UapAppxPackageBuildMode=SideloadOnly', '/p:AppxPackageSigningEnabled=true')
+            '/p:AppxBundle=Never', '/p:UapAppxPackageBuildMode=SideloadOnly', '/p:AppxPackageSigningEnabled=true',
+            # Unity's Il2CppOutputProject is a Makefile vcxproj; MSBuild's common targets still resolve .NET
+            # reference assemblies for it (default v4.0, which Build Tools 2019 ships only as a stub -> MSB3644).
+            # Native C++ either way; point the lookup at the installed 4.8 pack.
+            '/p:TargetFrameworkVersion=v4.8')
 if ($mb.Toolset) { $mbArgs += "/p:PlatformToolset=$($mb.Toolset)" }
 & $mb.Path @mbArgs
 if ($LASTEXITCODE -ne 0) { throw "MSBuild failed (exit $LASTEXITCODE)." }

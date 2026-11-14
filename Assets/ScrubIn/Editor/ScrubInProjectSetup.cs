@@ -109,8 +109,12 @@ namespace ScrubIn.EditorTools
             EditorUserBuildSettings.wsaSubtarget = WSASubtarget.HoloLens;
             EditorUserBuildSettings.wsaUWPBuildType = WSAUWPBuildType.D3D;
             EditorUserBuildSettings.wsaMinUWPSDK = "10.0.10240.0";
-            EditorUserBuildSettings.wsaUWPSDK = "";   // "" = Latest installed
-            EditorUserBuildSettings.wsaUWPVisualStudioVersion = "";   // "" = Latest installed
+            // Pinned, not "Latest installed": Unity references the WindowsMobile extension SDK, which SDK 10.0.26100
+            // no longer ships (MSB3774). 10.0.19041 comes with VS 2019 Build Tools and has it.
+            EditorUserBuildSettings.wsaUWPSDK = "10.0.19041.0";
+            // Pinned, not "Latest installed": with VS 2026 Build Tools also on the laptop, Unity generated v143
+            // projects that VS 2019 Build Tools cannot compile. (tools\build.ps1 also forces the toolset.)
+            EditorUserBuildSettings.wsaUWPVisualStudioVersion = "Visual Studio 2019";
             SetWsaArchitecture("x86");
 
             // Player > Other Settings.

@@ -582,11 +582,11 @@ PlayerSettings:
   m_MobileRenderingPath: 1
   metroPackageName: VIPER
   metroPackageVersion: 
-  metroCertificatePath: 
+  metroCertificatePath: Assets\WSATestCertificate.pfx
   metroCertificatePassword: 
-  metroCertificateSubject: 
-  metroCertificateIssuer: 
-  metroCertificateNotAfter: 0000000000000000
+  metroCertificateSubject: DefaultCompany
+  metroCertificateIssuer: DefaultCompany
+  metroCertificateNotAfter: 80380d1d8693de01
   metroApplicationDescription: scrubin
   wsaImages: {}
   metroTileShortName: 
