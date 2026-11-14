@@ -85,10 +85,13 @@ function Get-DPCredential {
     New-Object System.Management.Automation.PSCredential($env:HOLOLENS_USER, $sec)
 }
 
+# HOLOLENS_IP may include a port. HOLOLENS_SCHEME defaults to https (Wi-Fi). Over USB, HoloLens 1 serves Device
+# Portal at http://127.0.0.1:10080, so set HOLOLENS_IP=127.0.0.1:10080 and HOLOLENS_SCHEME=http for a cable deploy.
 function Get-DPBase {
     if (-not $env:HOLOLENS_IP) { throw 'HOLOLENS_IP not set (tools\.env.local or your shell).' }
-    Enable-HoloLensCert -Ip $env:HOLOLENS_IP
-    "https://$($env:HOLOLENS_IP)"
+    $scheme = if ($env:HOLOLENS_SCHEME) { $env:HOLOLENS_SCHEME } else { 'https' }
+    Enable-HoloLensCert -Ip (($env:HOLOLENS_IP -split ':')[0])
+    "${scheme}://$($env:HOLOLENS_IP)"
 }
 
 $script:DPSession = $null

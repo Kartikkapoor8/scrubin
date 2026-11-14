@@ -66,5 +66,9 @@ Query parameters (Microsoft Device Portal API reference). If you specify any, th
 | Headset app frame rate while streaming | `TBD` |
 | Holograms visible in the stream when the app runs via remoting (not deployed) | `TBD` |
 
-How delay is measured: a millisecond clock on the laptop screen, the HoloLens looking at it, and the stream playing
-next to it. Screenshot, then subtract the two clocks.
+How delay is measured: open `tools/latency-clock.html` (a big millisecond clock, no dependencies) on the Mac, with the
+stream playing next to it. The wearer looks at the clock. Take a screenshot; delay = page clock minus the clock seen
+inside the stream. Repeat 3 times and average.
+
+Laptop helpers: `tools\hotspot.ps1 on -FiveGHz` (start hotspot), `tools\hotspot.ps1 find` (prints the HoloLens IP),
+`tools\stream-check.ps1` (confirms the stream serves MP4 and measures throughput).

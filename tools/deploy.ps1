@@ -89,6 +89,10 @@ function Install-Rest {
     $handler.CookieContainer = $script:DPSession.Cookies
     $client = New-Object System.Net.Http.HttpClient($handler)
     $client.Timeout = [TimeSpan]::FromMinutes(10)
+    # Send Basic auth up front: a streamed multipart body cannot be replayed after a 401 challenge.
+    $nc = $cred.GetNetworkCredential()
+    $basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($nc.UserName + ':' + $nc.Password))
+    $client.DefaultRequestHeaders.Authorization = New-Object System.Net.Http.Headers.AuthenticationHeaderValue('Basic', $basic)
     $csrf = $script:DPSession.Cookies.GetCookies($base) | Where-Object Name -eq 'CSRF-Token' | Select-Object -First 1
     if ($csrf) { $null = $client.DefaultRequestHeaders.TryAddWithoutValidation('X-CSRF-Token', $csrf.Value) }
 

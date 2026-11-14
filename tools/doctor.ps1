@@ -166,20 +166,20 @@ else { Write-Check info 'Mobile hotspot' 'off (Settings > Network & internet > M
 # ---------------- HoloLens ----------------
 Write-Host "`n[HoloLens]" -ForegroundColor Cyan
 if ($env:HOLOLENS_IP) {
-    $ipH = $env:HOLOLENS_IP
+    $ipH = ($env:HOLOLENS_IP -split ':')[0]
+    $base = Get-DPBase
     $pings = Test-Connection -ComputerName $ipH -Count 4 -ErrorAction SilentlyContinue
     if ($pings) {
         $avg = [math]::Round((($pings | Measure-Object ResponseTime -Average).Average), 1)
         Write-Check ok "Ping $ipH" ("{0}/4 replies, avg {1} ms" -f @($pings).Count, $avg)
     } else { Bad "Ping $ipH" 'no reply (same network? device awake? client isolation?)' }
-    Enable-HoloLensCert -Ip $ipH
     try {
-        $r = Invoke-WebRequest -Uri "https://$ipH/" -UseBasicParsing -TimeoutSec 8
-        Write-Check ok 'Device Portal' "https://$ipH responds ($($r.StatusCode))"
+        $r = Invoke-WebRequest -Uri "$base/" -UseBasicParsing -TimeoutSec 8
+        Write-Check ok 'Device Portal' "$base responds ($($r.StatusCode))"
     } catch {
         $code = $null; if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
-        if ($code) { Write-Check ok 'Device Portal' "https://$ipH responds ($code, auth required)" }
-        else { Bad 'Device Portal' ("https://$ipH unreachable: " + $_.Exception.Message) }
+        if ($code) { Write-Check ok 'Device Portal' "$base responds ($code, auth required)" }
+        else { Bad 'Device Portal' ("$base unreachable: " + $_.Exception.Message) }
     }
     if ($env:HOLOLENS_USER -and $env:HOLOLENS_PASS) {
         try { $info = Invoke-DP -Path '/api/os/info'; Write-Check ok 'Device Portal login' ("OK -- {0} {1}" -f $info.ComputerName, $info.OsVersion) }

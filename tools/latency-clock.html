@@ -1,0 +1,44 @@
+<!doctype html>
+<!--
+  latency-clock.html -- measure glass-to-screen delay of the HoloLens MRC live stream.
+  1. Open this file in a browser on the machine that plays the stream (the Mac, or this laptop).
+  2. Put the stream window next to it. The HoloLens wearer looks at THIS clock so it appears in the stream.
+  3. Take a screenshot (or press Space here to freeze the clock and read it against the stream).
+     Delay = clock on this page - clock seen inside the stream.
+  No network access, no dependencies.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Latency clock</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #fff; font-family: Consolas, Menlo, monospace; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4vh; }
+  #clock { font-size: 14vw; font-weight: 700; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
+  #bar { width: 80vw; height: 4vh; background: #222; position: relative; }
+  #dot { position: absolute; top: 0; width: 4vh; height: 4vh; background: #3fe0ff; }
+  #help { font-size: 1.6vw; color: #888; text-align: center; }
+</style>
+</head>
+<body>
+  <div id="clock">00:00:00.000</div>
+  <div id="bar"><div id="dot"></div></div>
+  <div id="help">Look at this clock with the HoloLens. Screenshot both. Delay = this clock minus the clock in the stream.<br>
+    Space = freeze / unfreeze</div>
+<script>
+  var clock = document.getElementById('clock'), dot = document.getElementById('dot'), frozen = false;
+  function pad(n, w) { n = String(n); while (n.length < w) n = '0' + n; return n; }
+  function tick() {
+    if (!frozen) {
+      var d = new Date();
+      clock.textContent = pad(d.getHours(), 2) + ':' + pad(d.getMinutes(), 2) + ':' + pad(d.getSeconds(), 2) + '.' + pad(d.getMilliseconds(), 3);
+      // The dot sweeps once per second: a quick visual cross-check of the millisecond digits.
+      dot.style.left = (d.getMilliseconds() / 1000 * (dot.parentNode.clientWidth - dot.clientWidth)) + 'px';
+    }
+    requestAnimationFrame(tick);
+  }
+  document.addEventListener('keydown', function (e) { if (e.code === 'Space') { frozen = !frozen; e.preventDefault(); } });
+  tick();
+</script>
+</body>
+</html>

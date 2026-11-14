@@ -14,7 +14,7 @@ Import-ScrubInEnv
 if (-not $env:HOLOLENS_IP) { throw 'HOLOLENS_IP not set (tools\.env.local or your shell).' }
 $audio = if ($NoAudio) { 'false' } else { 'true' }
 # mic=false by default: the laptop speakers + wearer mic would echo in a demo room.
-$url = "https://$($env:HOLOLENS_IP)/api/holographic/stream/live_$Quality.mp4?holo=true&pv=true&mic=false&loopback=$audio"
+$url = (Get-DPBase) + "/api/holographic/stream/live_$Quality.mp4?holo=true&pv=true&mic=false&loopback=$audio"
 $edge = @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($edge) { Start-Process $edge -ArgumentList @('--new-window', '--start-fullscreen', $url) }
 else { Start-Process $url }
