@@ -13,8 +13,21 @@
 //   - Bytes are forwarded as they arrive (no buffering, Nagle off) to add as little delay as possible.
 //   - A stalled or dropped upstream ends the response quickly so the page can reconnect.
 import https from 'node:https';
+import { spawn, spawnSync } from 'node:child_process';
 
 const QUALITIES = new Set(['high', 'med', 'low']);
+// How long the repackager may take to produce its first bytes before the request is given up on.
+const REPACK_START_MS = 5000;
+
+// ffmpeg, if this Mac has it. It is only ever used to repackage the headset's video (same pictures, never
+// re-encoded) into the plainest fragmented MP4, for a browser that refuses the stream as the headset sends it.
+let ffmpegFound = null;
+function hasFfmpeg() {
+  if (ffmpegFound === null) {
+    try { ffmpegFound = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0; } catch { ffmpegFound = false; }
+  }
+  return ffmpegFound;
+}
 const CONNECT_TIMEOUT_MS = 6000;
 const STALL_TIMEOUT_MS = 5000;
 
@@ -71,12 +84,19 @@ export function createRelay(getHeadset, recorder = null) {
       loopback: String(flag('loopback', 'false')),
     });
     const path = `/api/holographic/stream/live_${quality}.mp4?${query}`;
+    // ?remux=1: pass the stream through ffmpeg on the way (see hasFfmpeg above).
+    const repack = url.searchParams.get('remux') === '1';
+    if (repack && !hasFfmpeg()) {
+      return fail(res, 501, 'no_remux', 'ffmpeg is not installed on this Mac, so the stream cannot be repackaged.');
+    }
 
     status.state = 'connecting';
     status.connects += 1;
     let finished = false;
     let stallTimer = null;
     let ticket = null; // this connection's place in the recorder
+    let packer = null; // the ffmpeg process, when repackaging
+    let packTimer = null;
 
     const upstream = https.request({
       host: hl.ip,
@@ -98,6 +118,11 @@ export function createRelay(getHeadset, recorder = null) {
       if (finished) return;
       finished = true;
       clearTimeout(stallTimer);
+      clearTimeout(packTimer);
+      if (packer) {
+        try { packer.stdin.destroy(); } catch { /* already closed */ }
+        packer.kill('SIGKILL');
+      }
       if (recorder && ticket) recorder.endStream(ticket);
       upstream.destroy();
       if (status.state === 'streaming' || status.state === 'connecting') status.state = 'idle';
@@ -166,24 +191,64 @@ export function createRelay(getHeadset, recorder = null) {
       status.state = 'streaming';
       status.lastError = '';
       status.since = Date.now();
-      res.writeHead(200, {
-        'Content-Type': 'video/mp4',
-        'Cache-Control': 'no-store, no-transform',
-        'X-Accel-Buffering': 'no',
-        Connection: 'close',
-      });
-      if (res.socket) res.socket.setNoDelay(true);
+      const begin = () => {
+        res.writeHead(200, {
+          'Content-Type': 'video/mp4',
+          'Cache-Control': 'no-store, no-transform',
+          'X-Accel-Buffering': 'no',
+          Connection: 'close',
+        });
+        if (res.socket) res.socket.setNoDelay(true);
+      };
+
+      if (repack) {
+        // Same video, new wrapping: small fragments addressed the way browsers' low-latency players require.
+        packer = spawn('ffmpeg', ['-loglevel', 'error', '-fflags', 'nobuffer', '-flags', 'low_delay',
+          '-probesize', '131072', '-analyzeduration', '0', '-i', 'pipe:0', '-map', '0:v:0', '-c', 'copy',
+          '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof', '-frag_duration', '100000',
+          '-flush_packets', '1', 'pipe:1'], { stdio: ['pipe', 'pipe', 'pipe'] });
+        let complaint = '';
+        packer.stderr.on('data', (text) => { complaint = (complaint + text).slice(-400); });
+        packer.stdin.on('error', () => { /* ffmpeg went away; its exit ends the request */ });
+        packer.on('error', () => finish());
+        packer.on('exit', () => {
+          if (finished) return;
+          if (!res.headersSent) {
+            finished = true;
+            clearTimeout(stallTimer);
+            clearTimeout(packTimer);
+            if (recorder && ticket) recorder.endStream(ticket);
+            upstream.destroy();
+            console.warn(`[relay] could not repackage the stream: ${complaint.trim().split('\n').pop() || 'ffmpeg stopped'}`);
+            fail(res, 502, 'remux_failed', 'The stream could not be repackaged.');
+          } else {
+            finish();
+          }
+        });
+        packer.stdout.on('data', (out) => {
+          if (!res.headersSent) { clearTimeout(packTimer); begin(); }
+          if (!res.write(out)) {
+            packer.stdout.pause();
+            res.once('drain', () => packer && packer.stdout.resume());
+          }
+        });
+        packTimer = setTimeout(() => { if (!res.headersSent && packer) packer.kill('SIGKILL'); }, REPACK_START_MS);
+      } else {
+        begin();
+      }
 
       armStallTimer();
       if (recorder) ticket = recorder.beginStream();
       up.on('data', (chunk) => {
         status.bytes += chunk.length;
         armStallTimer();
+        // The recording is always the stream exactly as the headset sent it.
         if (recorder) recorder.feed(ticket, chunk);
         // Forward immediately. If the page falls behind, pause the headset side rather than buffer here.
-        if (!res.write(chunk)) {
+        const sink = packer ? packer.stdin : res;
+        if (!sink.destroyed && !sink.write(chunk)) {
           up.pause();
-          res.once('drain', () => up.resume());
+          sink.once('drain', () => up.resume());
         }
       });
       up.on('end', finish);

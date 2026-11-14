@@ -67,7 +67,11 @@ export class InputManager {
 
   private create(kind: SourceKind): InputSource {
     switch (kind) {
-      case 'hololens': return new HoloLensSource('high', new URLSearchParams(location.search).get('hlmode') === 'progressive');
+      case 'hololens': {
+        // ?hlmode=progressive or ?hlmode=remux forces one way of playing the stream (see HoloLensSource).
+        const forced = new URLSearchParams(location.search).get('hlmode');
+        return new HoloLensSource('high', forced === 'progressive' || forced === 'remux' ? forced : '');
+      }
       case 'webcam': return new WebcamSource();
       case 'file': return this.file;
       case 'sim': return new SimulatedSource();

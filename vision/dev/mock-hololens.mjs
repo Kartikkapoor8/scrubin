@@ -125,7 +125,11 @@ function loadRaw(file) {
         const tfdt = child(buf, traf, 'tfdt');
         if (!tfhd || !tfdt) continue;
         const wide = buf[tfdt.body] === 1;
+        // Some writers address the pictures from the start of the whole stream (tfhd "base data offset").
+        const based = (buf.readUInt32BE(tfhd.body) & 1) === 1;
         times.push({
+          baseAt: based ? tfhd.body + 8 - box.start : -1,
+          base: based ? Number(buf.readBigUInt64BE(tfhd.body + 8)) : 0,
           track: buf.readUInt32BE(tfhd.body + 4),
           at: tfdt.body + 4 - box.start,
           wide,
@@ -161,7 +165,11 @@ function loadRaw(file) {
     + ` (${(step * 1000).toFixed(0)} ms each, ${timed ? 'timed by their own clock' : 'no usable clock: spread evenly'}),`
     + ` start of file before the first fragment: ${initEnd} bytes${tail ? `, cut-off tail: ${tail.length} bytes` : ''}`);
   if (!moov) console.log('[mock]   WARNING: no complete moov box before the first fragment. A player cannot start from this file.');
-  return { init: buf.subarray(0, initEnd), fragments, tail, seconds, tracks };
+  const loopBytes = fragments.reduce((sum, fr) => sum + fr.bytes.length, 0);
+  if (fragments.some((fr) => fr.times.some((tm) => tm.baseAt >= 0))) {
+    console.log('[mock]   fragments address their data from the start of the stream (base data offset): browsers\' Media Source players refuse this');
+  }
+  return { init: buf.subarray(0, initEnd), fragments, tail, seconds, tracks, loopBytes };
 }
 
 const raw = RAW ? loadRaw(path.resolve(RAW)) : null;
@@ -194,6 +202,7 @@ function serveRaw(req, res) {
         const shifted = time.value + Math.round(loop * raw.seconds * scale);
         if (time.wide) bytes.writeBigUInt64BE(BigInt(shifted), time.at);
         else bytes.writeUInt32BE(shifted >>> 0, time.at);
+        if (time.baseAt >= 0) bytes.writeBigUInt64BE(BigInt(time.base + loop * raw.loopBytes), time.baseAt);
       }
       if (fragment.sequenceAt >= 0) bytes.writeUInt32BE((bytes.readUInt32BE(fragment.sequenceAt) + loop * total) >>> 0, fragment.sequenceAt);
     }

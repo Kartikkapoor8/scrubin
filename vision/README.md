@@ -189,8 +189,11 @@ the detail. Tell the Mac agent which level it settled on (`__viper.brain` in the
   exactly one thing: the phone remote (`/remote`), behind its PIN.
 - The page plays the stream through Media Source Extensions and holds it at the live edge; the relay and
   player add roughly 0.1 to 0.2 s on top of the headset's own encoding delay. If the browser refuses the
-  stream that way, it falls back by itself to handing the stream to the video element (about 0.6 s behind);
-  `?hlmode=progressive` forces that. Both reconnect by themselves when the stream ends or stalls.
+  stream as the headset sends it, the page steps down by itself: first it asks the relay to repackage the
+  stream through `ffmpeg` (same video, never re-encoded, still about 0.1 s behind; needs `ffmpeg` on the
+  Mac), and if that fails too it hands the stream straight to the video element (about 0.6 s behind).
+  `?hlmode=remux` and `?hlmode=progressive` force either one. All three reconnect by themselves when the
+  stream ends or stalls; the browser console says which one is in use.
 - **The lag, and matching it.** The headset's picture arrives a second or more after real life. Press `Y`:
   a large running clock appears. Point the headset at the Mac's screen and compare the clock with its own
   image in the picture; the difference is the lag. Set it with `-` and `=` (0.1 s steps), then `Y` again.

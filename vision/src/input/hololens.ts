@@ -28,9 +28,17 @@ export class HoloLensSource implements InputSource {
    * headset's own Device Portal page plays it. A little more delay, but it plays anything the browser can.
    */
   private mode: 'mse' | 'progressive';
+  /**
+   * Ask the relay to repackage the stream (same video, plainest possible MP4 wrapping) before it reaches
+   * the page. Tried when the low-latency player refuses the stream as the headset sends it, before giving
+   * up on low latency altogether.
+   */
+  private remux: boolean;
+  private canRemux = true;
 
-  constructor(private quality: 'high' | 'med' | 'low' = 'high', forceProgressive = false) {
-    this.mode = forceProgressive ? 'progressive' : 'mse';
+  constructor(private quality: 'high' | 'med' | 'low' = 'high', force: 'progressive' | 'remux' | '' = '') {
+    this.mode = force === 'progressive' ? 'progressive' : 'mse';
+    this.remux = force === 'remux';
   }
 
   start(video: HTMLVideoElement, onStatus: (status: SourceStatus) => void): void {
@@ -89,7 +97,7 @@ export class HoloLensSource implements InputSource {
 
     let response: Response;
     try {
-      response = await fetch(`/api/stream?q=${this.quality}`, { signal: abort.signal, cache: 'no-store' });
+      response = await fetch(`/api/stream?q=${this.quality}${this.remux ? '&remux=1' : ''}`, { signal: abort.signal, cache: 'no-store' });
     } catch {
       if (!abort.signal.aborted) this.scheduleRetry('The local relay is not answering');
       return;
@@ -103,6 +111,16 @@ export class HoloLensSource implements InputSource {
         error = body.error || '';
         detail = body.detail || detail;
       } catch { /* not JSON */ }
+      if (error === 'no_remux' || error === 'remux_failed') {
+        // Repackaging is not available or did not work: play the stream the simple way.
+        console.warn('[hololens] the relay could not repackage the stream, falling back:', detail);
+        this.remux = false;
+        this.canRemux = false;
+        this.mode = 'progressive';
+        this.retryDelay = 300;
+        this.scheduleRetry('Switching playback method');
+        return;
+      }
       // Not configured or wrong password will not fix themselves: report it and let the operator switch.
       if (!this.everLive && (error === 'not_configured' || error === 'auth')) {
         this.onStatus({ state: 'unavailable', detail });
@@ -118,10 +136,17 @@ export class HoloLensSource implements InputSource {
     } catch (err) {
       if (abort.signal.aborted) return;
       if (err instanceof FormatError || (err instanceof DOMException && err.name !== 'AbortError')) {
-        // The stream arrived but this way of playing it was refused: use the simpler way from now on.
-        console.warn('[hololens] low-latency playback refused the stream, falling back:', err.message);
+        // The stream arrived but this way of playing it was refused. First have the relay repackage it,
+        // which keeps the low delay; if that is refused too, use the simpler way from now on.
         this.teardown();
-        this.mode = 'progressive';
+        if (!this.remux && this.canRemux) {
+          console.warn('[hololens] low-latency playback refused the stream as sent, asking the relay to repackage it:', err.message);
+          this.remux = true;
+        } else {
+          console.warn('[hololens] low-latency playback refused the stream, falling back:', err.message);
+          this.remux = false;
+          this.mode = 'progressive';
+        }
         this.retryDelay = 300;
         this.scheduleRetry('Switching playback method');
         return;
@@ -255,6 +280,9 @@ export class HoloLensSource implements InputSource {
 
     // Hold the picture close to the live edge: speed up a little when behind, jump when far behind.
     let announced = false;
+    const begunAt = performance.now();
+    let movedAt = begunAt;
+    let lastTime = -1;
     window.clearInterval(this.chaseTimer);
     this.chaseTimer = window.setInterval(() => {
       if (buffer.buffered.length === 0) return;
@@ -271,6 +299,10 @@ export class HoloLensSource implements InputSource {
         video.playbackRate = 1;
       }
       if (video.paused) void video.play().catch(() => {});
+      if (Math.abs(video.currentTime - lastTime) > 0.04) {
+        lastTime = video.currentTime;
+        movedAt = performance.now();
+      }
       if (!announced && video.readyState >= 2) {
         announced = true;
         this.everLive = true;
@@ -284,6 +316,10 @@ export class HoloLensSource implements InputSource {
       if (failed) throw failed;
       if (done) return;
       if (signal.aborted) return;
+      // Data keeps arriving but no picture ever came out of it: this way of playing it is not working.
+      if (!announced && performance.now() - begunAt > 8000) throw new FormatError('The stream arrived but no picture came out of it');
+      // It was playing and has frozen with data still arriving: start again from a fresh connection.
+      if (announced && !document.hidden && performance.now() - movedAt > 6000) throw new Error('The picture stopped moving');
       queue.push(value);
       // If the page was hidden and data piled up, skip ahead rather than play catch-up through a backlog.
       if (queue.length > 240) queue.splice(0, queue.length - 60);
