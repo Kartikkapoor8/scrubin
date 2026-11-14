@@ -162,7 +162,15 @@ export class HoloLensSource implements InputSource {
           .catch(() => this.scheduleRetry('The local relay is not answering'));
         return;
       }
-      if (video.currentTime !== lastTime) {
+      if (video.ended) {
+        // The headset closed the stream. Pressing play again would only replay what is already here from
+        // the start, so open a fresh connection instead.
+        this.scheduleRetry('The headset stream ended');
+        return;
+      }
+      // Moving means real progress: a picture that creeps forward a few hundredths of a second at a time
+      // is stuck, whatever the clock says.
+      if (Math.abs(video.currentTime - lastTime) > 0.04) {
         lastTime = video.currentTime;
         movedAt = now;
         if (!announced && video.readyState >= 2) {
@@ -175,11 +183,15 @@ export class HoloLensSource implements InputSource {
         this.scheduleRetry(announced ? 'The headset stream stalled' : 'The headset stream did not start');
         return;
       }
-      // Stay near the newest picture.
+      // Stay near the newest picture. This kind of stream cannot be searched, so never jump: play a little
+      // faster to catch up, and if it has fallen far behind, reconnect, which always starts at "now".
       if (video.buffered.length > 0) {
         const lag = video.buffered.end(video.buffered.length - 1) - video.currentTime;
-        if (lag > 3) video.currentTime = video.buffered.end(video.buffered.length - 1) - 0.5;
-        else video.playbackRate = lag > 1.2 ? 1.15 : 1;
+        if (lag > 8 && announced) {
+          this.scheduleRetry('Catching up with the headset');
+          return;
+        }
+        video.playbackRate = lag > 3 ? 1.6 : lag > 1.2 ? 1.15 : 1;
       }
       if (video.paused) void video.play().catch(() => {});
     }, 250);
