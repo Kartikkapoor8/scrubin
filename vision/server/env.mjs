@@ -30,15 +30,42 @@ function parseEnvFile(file) {
   return out;
 }
 
+const ENV_FILES = [path.join(VISION_ROOT, '.env.local'), path.join(VISION_ROOT, '..', 'tools', '.env.local')];
+// What the shell gave us at startup. These always win over the files.
+const SHELL_ENV = { ...process.env };
+
+function fileStamp() {
+  return ENV_FILES.map((file) => {
+    try { return String(fs.statSync(file).mtimeMs); } catch { return '-'; }
+  }).join('|');
+}
+
+let cached = null;
+let cachedStamp = '';
+
+/**
+ * Current settings. Re-reads the settings files whenever one of them appears or changes, so credentials can
+ * be added or corrected while the server is running (no restart in the middle of a rehearsal).
+ */
+export function currentConfig() {
+  const stamp = fileStamp();
+  if (!cached || stamp !== cachedStamp) {
+    const first = cached === null;
+    cached = loadEnv();
+    cachedStamp = stamp;
+    if (!first) console.log('[env] settings file changed: reloaded');
+  }
+  return cached;
+}
+
 export function loadEnv() {
-  const files = [path.join(VISION_ROOT, '.env.local'), path.join(VISION_ROOT, '..', 'tools', '.env.local')];
   const merged = {};
-  for (const file of files.reverse()) Object.assign(merged, parseEnvFile(file));
-  for (const [key, value] of Object.entries(merged)) {
-    if (process.env[key] === undefined || process.env[key] === '') process.env[key] = value;
+  for (const file of [...ENV_FILES].reverse()) Object.assign(merged, parseEnvFile(file));
+  const env = { ...merged };
+  for (const [key, value] of Object.entries(SHELL_ENV)) {
+    if (value !== undefined && value !== '') env[key] = value;
   }
 
-  const env = process.env;
   const clean = (v) => (typeof v === 'string' ? v.trim() : '');
   return {
     port: Number(clean(env.VISION_PORT)) || 4747,
@@ -57,9 +84,3 @@ export function loadEnv() {
   };
 }
 
-// "192.168.137.42" -> "192.168.137.x": enough to recognise it in the UI without publishing it on a projector.
-export function maskIp(ip) {
-  if (!ip) return '';
-  const parts = ip.split('.');
-  return parts.length === 4 ? `${parts[0]}.${parts[1]}.${parts[2]}.x` : 'set';
-}

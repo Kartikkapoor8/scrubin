@@ -11,10 +11,10 @@ const DEFAULT_MODEL = 'gemini-3.8-live';
 const START_WINDOW_MS = 2 * 60 * 1000;
 const SESSION_WINDOW_MS = 30 * 60 * 1000;
 
-export function createGemini(config) {
-  const apiKey = config.gemini.apiKey;
-  const model = config.gemini.liveModel || DEFAULT_MODEL;
+/** @param getSettings returns the current { apiKey, liveModel }; read on every request. */
+export function createGemini(getSettings) {
   let client = null;
+  let clientKey = '';
 
   async function handleToken(req, res) {
     const send = (code, body) => {
@@ -22,13 +22,16 @@ export function createGemini(config) {
       res.end(JSON.stringify(body));
     };
     if (req.method !== 'POST') return send(405, { error: 'method_not_allowed' });
+    const { apiKey, liveModel } = getSettings();
+    const model = liveModel || DEFAULT_MODEL;
     if (!apiKey) {
       return send(503, { error: 'not_configured', detail: 'Set GEMINI_API_KEY in vision/.env.local and restart the server.' });
     }
     try {
-      if (!client) {
+      if (!client || clientKey !== apiKey) {
         const { GoogleGenAI } = await import('@google/genai');
         client = new GoogleGenAI({ apiKey, httpOptions: { apiVersion: 'v1beta' } });
+        clientKey = apiKey;
       }
       const now = Date.now();
       const tokenConfig = {
@@ -53,5 +56,9 @@ export function createGemini(config) {
     }
   }
 
-  return { configured: Boolean(apiKey), model, handleToken };
+  return {
+    get configured() { return Boolean(getSettings().apiKey); },
+    get model() { return getSettings().liveModel || DEFAULT_MODEL; },
+    handleToken,
+  };
 }

@@ -9,6 +9,7 @@ import { Viewport } from './core/viewport';
 import { InputManager } from './input/manager';
 import type { SourceKind } from './input/types';
 import { Sounds } from './app/audio';
+import { StreamRecording } from './app/recording';
 import { AttendingBrain } from './brain/live';
 import type { BrainHost, Structure } from './brain/tools';
 import { AnatomyLayer } from './overlay/layers/anatomy';
@@ -33,7 +34,7 @@ import { TitleCard } from './ui/title';
 import { VitalsPanel } from './ui/vitals';
 
 interface ServerConfig {
-  hololens: { configured: boolean; target: string };
+  hololens: { configured: boolean };
   gemini: { configured: boolean; model: string };
   clips: string[];
 }
@@ -43,7 +44,7 @@ async function loadConfig(): Promise<ServerConfig> {
     const res = await fetch('/api/config', { cache: 'no-store' });
     if (res.ok) return (await res.json()) as ServerConfig;
   } catch { /* the page still works on webcam, file and the simulated arm */ }
-  return { hololens: { configured: false, target: '' }, gemini: { configured: false, model: '' }, clips: [] };
+  return { hololens: { configured: false }, gemini: { configured: false, model: '' }, clips: [] };
 }
 
 const KEYS: Array<[string, string]> = [
@@ -59,6 +60,7 @@ const KEYS: Array<[string, string]> = [
   ['V', 'Attending speaks its answers aloud: on / off'],
   ['L', 'Send the attending the current picture'],
   ['1 2 3 4', 'Input: HoloLens / webcam / video file / simulated arm'],
+  ['C', 'Record the raw HoloLens stream to vision/media (C again stops; Shift+C records 60 s)'],
   ['K', 'Pick the marker colour: press K, then click the marker line'],
   ['M', 'Next marker colour preset (green, magenta, blue, orange)'],
   ['X  Z', 'Flip which end is suture 1 / which side is the far side'],
@@ -148,6 +150,10 @@ async function boot(): Promise<void> {
   const handChip = hud.addChip('Hands');
   const woundChip = hud.addChip('Wound');
   const autoChip = hud.addChip('Autoplay');
+  const recording = new StreamRecording(hud.addChip('Rec'), (text, ms) => hud.notice(text, ms), (file) => {
+    // The new clip becomes what key 3 plays.
+    config.clips = [file, ...config.clips.filter((c) => c !== file)];
+  });
 
   if (params.get('hands') !== '0') void hands.start();
 
@@ -251,9 +257,13 @@ async function boot(): Promise<void> {
     picker.value = '';
   });
 
+  let clipPlaying = '';
   const chooseFile = () => {
-    if (input.hasFile) input.choose('file');
-    else if (config.clips.length > 0) input.useFile(`/media/${encodeURIComponent(config.clips[0])}`);
+    // The newest clip in vision/media, unless the operator dropped or picked a file of their own.
+    if (config.clips.length > 0 && (clipPlaying !== config.clips[0] || !input.hasFile)) {
+      clipPlaying = config.clips[0];
+      input.useFile(`/media/${encodeURIComponent(config.clips[0])}`);
+    } else if (input.hasFile) input.choose('file');
     else picker.click();
   };
 
@@ -332,6 +342,7 @@ async function boot(): Promise<void> {
       case '2': input.choose('webcam'); break;
       case '3': chooseFile(); break;
       case '4': input.choose('sim'); break;
+      case 'c': case 'C': void recording.toggle(event.shiftKey ? 60 : 0); break;
       case 'k': case 'K': setPicking(!picking); break;
       case 'm': case 'M': {
         preset = (preset + 1) % presets.length;

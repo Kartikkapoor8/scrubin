@@ -13,17 +13,22 @@
 //   - Bytes are forwarded as they arrive (no buffering, Nagle off) to add as little delay as possible.
 //   - A stalled or dropped upstream ends the response quickly so the page can reconnect.
 import https from 'node:https';
-import { maskIp } from './env.mjs';
 
 const QUALITIES = new Set(['high', 'med', 'low']);
 const CONNECT_TIMEOUT_MS = 6000;
 const STALL_TIMEOUT_MS = 5000;
 
-export function createRelay(config) {
-  const hl = config.hololens;
+/**
+ * @param getHeadset  returns the current headset settings ({ ip, user, pass, port, certSha256 }); read on
+ *                    every request, so they can be added or corrected while the server runs.
+ * @param recorder    optional: every forwarded byte is also offered to it (see recorder.mjs).
+ */
+export function createRelay(getHeadset, recorder = null) {
   const status = {
-    configured: Boolean(hl.ip && hl.user),
-    target: maskIp(hl.ip),
+    get configured() {
+      const hl = getHeadset();
+      return Boolean(hl.ip && hl.user);
+    },
     state: 'idle', // idle | connecting | streaming | error
     lastError: '',
     connects: 0,
@@ -52,6 +57,7 @@ export function createRelay(config) {
   }
 
   function handleStream(req, res, url) {
+    const hl = getHeadset();
     if (!status.configured) {
       return fail(res, 503, 'not_configured', 'Set HOLOLENS_IP, HOLOLENS_USER and HOLOLENS_PASS (see .env.example).');
     }
@@ -70,6 +76,7 @@ export function createRelay(config) {
     status.connects += 1;
     let finished = false;
     let stallTimer = null;
+    let ticket = null; // this connection's place in the recorder
 
     const upstream = https.request({
       host: hl.ip,
@@ -91,6 +98,7 @@ export function createRelay(config) {
       if (finished) return;
       finished = true;
       clearTimeout(stallTimer);
+      if (recorder && ticket) recorder.endStream(ticket);
       upstream.destroy();
       if (status.state === 'streaming' || status.state === 'connecting') status.state = 'idle';
       if (!res.writableEnded) res.end();
@@ -167,9 +175,11 @@ export function createRelay(config) {
       if (res.socket) res.socket.setNoDelay(true);
 
       armStallTimer();
+      if (recorder) ticket = recorder.beginStream();
       up.on('data', (chunk) => {
         status.bytes += chunk.length;
         armStallTimer();
+        if (recorder) recorder.feed(ticket, chunk);
         // Forward immediately. If the page falls behind, pause the headset side rather than buffer here.
         if (!res.write(chunk)) {
           up.pause();
@@ -186,6 +196,7 @@ export function createRelay(config) {
   // A quick authenticated probe, so the page can say why the headset is not available before it tries to play.
   function probe() {
     return new Promise((resolve) => {
+      const hl = getHeadset();
       if (!status.configured) return resolve({ ok: false, error: 'not_configured' });
       const request = https.request(
         {

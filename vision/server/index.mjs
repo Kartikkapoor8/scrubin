@@ -7,17 +7,19 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadEnv, maskIp, VISION_ROOT } from './env.mjs';
+import { currentConfig, VISION_ROOT } from './env.mjs';
+import { createRecorder } from './recorder.mjs';
 import { createRelay } from './relay.mjs';
 
 const DEV = process.argv.includes('--dev');
-const config = loadEnv();
-const relay = createRelay(config);
+const config = currentConfig();
+const recorder = createRecorder(path.join(VISION_ROOT, 'media'));
+const relay = createRelay(() => currentConfig().hololens, recorder);
 
 let gemini = null;
 try {
   const mod = await import('./gemini.mjs');
-  gemini = mod.createGemini(config);
+  gemini = mod.createGemini(() => currentConfig().gemini);
 } catch (err) {
   if (err.code !== 'ERR_MODULE_NOT_FOUND') console.warn('[gemini] disabled:', err.message);
 }
@@ -75,16 +77,24 @@ async function handleApi(req, res, url) {
     const mediaDir = path.join(VISION_ROOT, 'media');
     let clips = [];
     try {
-      clips = fs.readdirSync(mediaDir).filter((f) => /\.(mp4|webm|mov|m4v)$/i.test(f)).sort();
+      // Newest first: key 3 plays the most recent recording.
+      clips = fs.readdirSync(mediaDir).filter((f) => /\.(mp4|webm|mov|m4v)$/i.test(f))
+        .map((f) => ({ f, t: fs.statSync(path.join(mediaDir, f)).mtimeMs }))
+        .sort((a, b) => b.t - a.t).map((x) => x.f);
     } catch { /* no media folder yet */ }
     return json(res, 200, {
-      hololens: { configured: relay.status.configured, target: maskIp(config.hololens.ip) },
+      hololens: { configured: relay.status.configured },
       gemini: { configured: Boolean(gemini && gemini.configured), model: gemini ? gemini.model : '' },
       clips,
     });
   }
   if (url.pathname === '/api/stream') return relay.handleStream(req, res, url);
   if (url.pathname === '/api/stream/probe') return json(res, 200, { ...(await relay.probe()), status: relay.status });
+  if (url.pathname === '/api/record') return json(res, 200, recorder.status());
+  if (url.pathname === '/api/record/start' && req.method === 'POST') {
+    return json(res, 200, recorder.start(url.searchParams.get('seconds') || 0));
+  }
+  if (url.pathname === '/api/record/stop' && req.method === 'POST') return json(res, 200, await recorder.stop());
   if (url.pathname === '/api/gemini-token') {
     if (!gemini) return json(res, 503, { error: 'not_available', detail: 'Gemini support is not built yet.' });
     return gemini.handleToken(req, res);
@@ -135,6 +145,6 @@ if (DEV) {
 
 server.listen(config.port, '127.0.0.1', () => {
   console.log(`\n  VIPER Vision  ${DEV ? '(dev)' : ''}  http://localhost:${config.port}\n`);
-  console.log(`  HoloLens stream : ${relay.status.configured ? 'configured for ' + maskIp(config.hololens.ip) : 'not configured (webcam, video file and simulated arm still work)'}`);
+  console.log(`  HoloLens stream : ${relay.status.configured ? 'configured' : 'not configured yet (add vision/.env.local; it is picked up without a restart)'}`);
   console.log(`  Gemini attending: ${gemini && gemini.configured ? 'configured' : 'not configured'}\n`);
 });

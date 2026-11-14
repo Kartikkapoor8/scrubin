@@ -150,8 +150,8 @@ export class StatusChip {
     if (this.root.style.display !== display) this.root.style.display = display;
   }
 
-  set(text: string, tone: 'ok' | 'busy' | 'bad' | 'off'): void {
+  set(text: string, tone: 'ok' | 'busy' | 'bad' | 'off' | 'rec'): void {
     if (this.text.textContent !== text) this.text.textContent = text;
-    for (const t of ['ok', 'busy', 'bad', 'off']) this.root.classList.toggle(`chip--${t}`, t === tone);
+    for (const t of ['ok', 'busy', 'bad', 'off', 'rec']) this.root.classList.toggle(`chip--${t}`, t === tone);
   }
 }

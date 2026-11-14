@@ -246,6 +246,8 @@ body {
 .chip--bad { color: var(--red); border-color: rgba(var(--red-rgb), 0.45); }
 .chip--bad .chip__dot { background: var(--red); }
 .chip--off { opacity: 0.55; }
+.chip--rec { color: #fff; border-color: rgba(var(--red-rgb), 0.7); background: rgba(var(--red-rgb), 0.22); }
+.chip--rec .chip__dot { background: var(--red); box-shadow: 0 0 calc(var(--u) * 0.9) rgba(var(--red-rgb), 0.9); animation: blink 900ms ease-in-out infinite; }
 
 @keyframes blink {
   0%, 100% { opacity: 1; }
