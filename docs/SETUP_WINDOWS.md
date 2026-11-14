@@ -17,11 +17,15 @@ settings are already proven on the HoloLens.
    It prints the rig's Unity version and warns if the rig's package manifest has local `file:` paths or MRTK
    in it. Tell Kartik's agent if it does.
 3. Unity Hub ▸ **Add** ▸ pick `C:\dev\ScrubIn` ▸ open it with the **same 2019.4 version** the script printed.
-4. In Unity: menu **ScrubIn ▸ Setup Project**. It creates and opens the demo scene (one GameObject with
+4. In Unity: menu **ScrubIn ▸ Switch Platform to UWP (HoloLens)**. A newly opened project always starts on
+   the Standalone platform: the active platform is stored per machine, not in the copied settings, and
+   Holographic Remoting only works with UWP active. (Same as File ▸ Build Settings ▸ Universal Windows
+   Platform ▸ Switch Platform.) Everyone who will run on the headset does this once on their machine.
+5. Menu **ScrubIn ▸ Setup Project**. It creates and opens the demo scene (one GameObject with
    `ScrubInBootstrap`), registers it in Build Settings, adds the HoloGlow shader to Always Included Shaders,
-   turns on the three UWP capabilities, imports the TextMeshPro essentials, and prints a settings check to the
-   Console.
-5. Commit what that produced so the team shares it:
+   names the app ScrubIn (so a device build does not replace the rig's app), turns on the three UWP
+   capabilities, imports the TextMeshPro essentials, and prints a settings check to the Console.
+6. Commit what that produced so the team shares it:
 
    ```
    git add ProjectSettings Packages/manifest.json Assets
@@ -84,7 +88,8 @@ Then run **ScrubIn ▸ Setup Project** and commit `ProjectSettings/`, `Packages/
    - **Connect**, and wait for the green **Connected**.
 3. Press **Play**. Click the Game view once so the keyboard goes to it.
 4. The operator legend (top-left of the Game view) should say **HEADSET (WindowsMR)**. If it says
-   DESKTOP PREVIEW, the headset is not driving the camera: check the connection and the XR settings above.
+   DESKTOP PREVIEW, the headset is not driving the camera: check the connection, that the platform is UWP
+   (ScrubIn ▸ Check HoloLens Settings), and the XR settings above.
 
 No headset? Press Play anyway. The desktop preview shows the same holograms: right-drag orbits, scroll zooms,
 and every operator key works.

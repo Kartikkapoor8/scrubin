@@ -181,11 +181,13 @@ defaults are used and the editor legend shows a warning.
   `_FlowSpeed`/`_FlowCount`/`_FlowStrength` (bright bands travelling along U, for artery flow),
   `_RevealOn`/`_RevealAxis`/`_RevealPos`/`_RevealBand`/`_RevealGlow` (scan-in wipe along an axis in patient space).
   Property ids are in `HoloProps`.
-- `LineBuilder`: `Polyline`, `Dot`, plus point helpers (`Arc`, `Circle`). Thin camera-facing glow lines.
+- `LineBuilder`: `Polyline` and `Segment` (thin camera-facing glow lines), `Dot` (faces the viewer) and `Quad`
+  (lies flat on a surface) for `Disc` / `Ring` materials, plus point helpers `Arc` and `Circle`.
 - `TubeBuilder`: `CatmullRom` path sampling and `Tube` meshes (U runs along the tube, so flow pulses just work).
 - `LabelBuilder`: TMP labels sized by cap height in meters, optional leader line, billboarded to the viewer.
-- `HoloElement`: put one on any object to animate everything under it in and out (`Show(delay)`, `Hide()`,
-  `Snap(bool)`). **Every appearance animates** (ease-out, stagger 100–150 ms); nothing pops in.
+- `HoloElement`: `HoloElement.On(group)` animates everything under an object in and out (`Show(delay)`,
+  `Hide()`, `Snap(bool)`; `On(group, true)` makes lines trace themselves on). **Every appearance animates**
+  (ease-out, stagger 100–150 ms); nothing pops in.
 - Line widths that read well at 0.7 m: 2.5–3 mm for primary contours, 1.5 mm for fine detail.
 - Look: cinematic medical sci-fi, clean and confident, never cluttered.
 
@@ -217,7 +219,8 @@ Without a headset, the editor runs a **desktop preview**: right-drag orbits, scr
 ## Running it
 
 First time on the Windows machine: see `docs/SETUP_WINDOWS.md` (copy the rig's settings with
-`tools\setup-from-rig.ps1`, open in Unity 2019.4, run **ScrubIn ▸ Setup Project** once).
+`tools\setup-from-rig.ps1`, open in Unity 2019.4, run **ScrubIn ▸ Switch Platform to UWP (HoloLens)** and
+**ScrubIn ▸ Setup Project** once).
 
 Every time:
 1. On the HoloLens, start **Holographic Remoting Player** and note the IP it shows.
@@ -234,8 +237,9 @@ No headset: just press Play. You get the desktop preview with the same keys.
   message, push, and tell your human in 3 lines what to test. Don't go past a step that hasn't been confirmed on
   the headset unless told to.
 - If an API might not exist in 2019.4 or on HL1, say so and pick the safer path. Guard device-only APIs
-  (`UnityEngine.XR.WSA.*`, `UnityEngine.Windows.Speech.*`) with `#if UNITY_WSA || UNITY_EDITOR_WIN` and keep a
-  keyboard path for whatever they do.
+  (`UnityEngine.XR.WSA.*`, `UnityEngine.Windows.Speech.*`) with `#if UNITY_WSA` (it is defined in the editor
+  too once the platform is switched to UWP, which remoting needs anyway) and keep a keyboard path for whatever
+  they do. The project must still compile with the platform set to Standalone.
 - Keep everything data-driven from `procedure.json`.
 - Git: `main` only, small commits, `git pull --rebase` before every push. **Always commit the `.meta` file with
   every new asset or folder** (mismatched GUIDs between machines are the usual way a Unity repo breaks). Never
