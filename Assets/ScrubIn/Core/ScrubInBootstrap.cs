@@ -141,16 +141,8 @@ namespace ScrubIn
             OperatorInput input = gameObject.AddComponent<OperatorInput>();
             input.Init(this, _ctx, holoInput);
 
-            try
-            {
-                ArmOutline.Build(_ctx);
-            }
-            catch (Exception e)
-            {
-                ScrubInLog.Warn("The alignment outline failed to build: " + e.Message);
-                Debug.LogException(e);
-            }
-
+            // The headset shows only the holographic body (Body/BodyInteraction, an IScrubInModule). The old arm
+            // outline is no longer built: its hologram wound line is green, and the Mac tracks a green marker.
             BuildModules();
 
             StartCoroutine(PlaceWhenReady());

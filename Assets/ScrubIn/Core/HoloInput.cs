@@ -8,21 +8,25 @@ using UnityEngine.XR.WSA.Input;
 namespace ScrubIn
 {
     /// <summary>
-    /// The headset's own input, so the app is usable with no keyboard:
-    ///  - Air tap places the outline (locks alignment). Once it is placed, taps do nothing, so a hand doing
-    ///    pretend surgery in view of the headset cannot disturb anything.
-    ///  - Press-and-hold picks it up again, only if options.holdToReposition is on (off by default).
-    ///  - Each frame the HoloLens is told to stabilise holograms at the wound (options.focusPoint).
-    /// Never required: every action here also has an operator key (Enter = air tap, L = lock / unlock).
+    /// The headset's own input (HoloLens 1, legacy Windows Mixed Reality API), reported as plain events:
+    ///  - Tapped: an air tap (also Enter / left click in the editor).
+    ///  - Drag started / updated / ended: tap-and-hold then move the hand (ManipulationTranslate). The delta is
+    ///    the hand's movement in world space since the hold began.
+    ///  - HandVisible / HandPosition: the rough hand position HoloLens 1 reports while a hand is in view.
     /// The HoloLens APIs are only touched when an XR device is actually active.
     /// </summary>
     public class HoloInput : MonoBehaviour
     {
-        const float TapDebounce = 0.4f;
+        const float TapDebounce = 0.3f;
 
         ScrubInContext _ctx;
         bool _deviceStarted;
         float _lastTap = -10f;
+
+        public event Action Tapped;
+        public event Action DragStarted;
+        public event Action<Vector3> DragUpdated;
+        public event Action DragEnded;
 
         /// <summary>True while the headset can see a hand.</summary>
         public bool HandVisible { get; private set; }
@@ -30,29 +34,23 @@ namespace ScrubIn
         /// <summary>World position of that hand (only meaningful while HandVisible).</summary>
         public Vector3 HandPosition { get; private set; }
 
+        /// <summary>Where the HoloLens should stabilise holograms this frame (set by whoever owns the content).</summary>
+        public Vector3? FocusPoint { get; set; }
+
         public void Init(ScrubInContext ctx)
         {
             _ctx = ctx;
         }
 
-        /// <summary>What an air tap does. Also bound to Enter for the operator.</summary>
+        /// <summary>An air tap. Also bound to Enter for the operator.</summary>
         public void Tap()
         {
             if (_ctx == null) return;
             if (Time.unscaledTime - _lastTap < TapDebounce) return;
             _lastTap = Time.unscaledTime;
 
-            if (!_ctx.Alignment.Locked) _ctx.Alignment.SetLocked(true);
-        }
-
-        /// <summary>What press-and-hold does: pick the outline up again so it can be re-placed.</summary>
-        public void Hold()
-        {
-            if (_ctx == null || !_ctx.Procedure.options.holdToReposition) return;
-            if (!_ctx.Alignment.Locked) return;
-
-            _ctx.Alignment.SetLocked(false);
-            _ctx.Alignment.SetFollowing(_ctx.Procedure.options.followGazeUntilPlaced);
+            if (Tapped != null) Tapped();
+            else if (!_ctx.Alignment.Locked) _ctx.Alignment.SetLocked(true);
         }
 
         void Update()
@@ -63,6 +61,10 @@ namespace ScrubIn
                 StartDevice();
             }
         }
+
+        void RaiseDragStarted() { if (DragStarted != null) DragStarted(); }
+        void RaiseDragUpdated(Vector3 delta) { if (DragUpdated != null) DragUpdated(delta); }
+        void RaiseDragEnded() { if (DragEnded != null) DragEnded(); }
 
 #if UNITY_WSA
         // The built-in (legacy) Windows Mixed Reality API is what HoloLens 1 uses in Unity 2019.4. Unity marks
@@ -75,9 +77,12 @@ namespace ScrubIn
             try
             {
                 _recognizer = new GestureRecognizer();
-                _recognizer.SetRecognizableGestures(GestureSettings.Tap | GestureSettings.Hold);
+                _recognizer.SetRecognizableGestures(GestureSettings.Tap | GestureSettings.ManipulationTranslate);
                 _recognizer.Tapped += OnTapped;
-                _recognizer.HoldCompleted += OnHoldCompleted;
+                _recognizer.ManipulationStarted += OnManipulationStarted;
+                _recognizer.ManipulationUpdated += OnManipulationUpdated;
+                _recognizer.ManipulationCompleted += OnManipulationCompleted;
+                _recognizer.ManipulationCanceled += OnManipulationCanceled;
                 _recognizer.StartCapturingGestures();
 
                 InteractionManager.InteractionSourceUpdated += OnSourceUpdated;
@@ -85,19 +90,15 @@ namespace ScrubIn
             }
             catch (Exception e)
             {
-                ScrubInLog.Warn("Air tap is unavailable (" + e.Message + "). Use the keyboard: Enter places the outline.");
+                ScrubInLog.Warn("Air tap is unavailable (" + e.Message + "). Use the keyboard: Enter = tap.");
             }
         }
 
-        void OnTapped(TappedEventArgs args)
-        {
-            Tap();
-        }
-
-        void OnHoldCompleted(HoldCompletedEventArgs args)
-        {
-            Hold();
-        }
+        void OnTapped(TappedEventArgs args) { Tap(); }
+        void OnManipulationStarted(ManipulationStartedEventArgs args) { RaiseDragStarted(); }
+        void OnManipulationUpdated(ManipulationUpdatedEventArgs args) { RaiseDragUpdated(args.cumulativeDelta); }
+        void OnManipulationCompleted(ManipulationCompletedEventArgs args) { RaiseDragEnded(); }
+        void OnManipulationCanceled(ManipulationCanceledEventArgs args) { RaiseDragEnded(); }
 
         void OnSourceUpdated(InteractionSourceUpdatedEventArgs args)
         {
@@ -118,10 +119,10 @@ namespace ScrubIn
         void LateUpdate()
         {
             // Holograms here do not write depth, so the HoloLens cannot work out where to stabilise on its own.
-            // Point it at the wound, facing the wearer.
             if (_ctx == null || !_ctx.IsHeadset || !_ctx.Procedure.options.focusPoint) return;
             if (!_ctx.Alignment.Placed) return;
-            HolographicSettings.SetFocusPointForFrame(_ctx.Alignment.PivotWorld, -_ctx.Head.forward);
+            Vector3 point = FocusPoint.HasValue ? FocusPoint.Value : _ctx.Alignment.PivotWorld;
+            HolographicSettings.SetFocusPointForFrame(point, -_ctx.Head.forward);
         }
 
         void OnDestroy()
@@ -132,7 +133,10 @@ namespace ScrubIn
                 InteractionManager.InteractionSourceUpdated -= OnSourceUpdated;
                 InteractionManager.InteractionSourceLost -= OnSourceLost;
                 _recognizer.Tapped -= OnTapped;
-                _recognizer.HoldCompleted -= OnHoldCompleted;
+                _recognizer.ManipulationStarted -= OnManipulationStarted;
+                _recognizer.ManipulationUpdated -= OnManipulationUpdated;
+                _recognizer.ManipulationCompleted -= OnManipulationCompleted;
+                _recognizer.ManipulationCanceled -= OnManipulationCanceled;
                 _recognizer.StopCapturingGestures();
                 _recognizer.Dispose();
             }
@@ -146,7 +150,7 @@ namespace ScrubIn
 #else
         void StartDevice()
         {
-            // Not a Windows Mixed Reality build: no air tap. The keyboard path covers everything.
+            // Not a Windows Mixed Reality build: no air tap. The keyboard / mouse path covers everything.
         }
 #endif
     }

@@ -16,8 +16,14 @@ namespace ScrubIn
     {
         public const float SpawnDistance = 0.7f;   // meters in front of the head
         public const float SpawnDrop = 0.45f;      // meters below the head
-        public const float MinScale = 0.7f;
-        public const float MaxScale = 1.4f;
+        public const float MinScale = 0.25f;   // "smaller" down to a tabletop model
+        public const float MaxScale = 1.6f;
+
+        /// <summary>
+        /// While following: a point on a real horizontal surface (spatial mapping) under the wearer's gaze. When set,
+        /// the patient sits on it (the table under the arm) instead of floating at a fixed distance.
+        /// </summary>
+        public Vector3? SurfaceTarget { get; set; }
 
         // Follow mode keeps the wound on the wearer's line of sight at the same range as the spawn pose
         // (0.7 m ahead and 0.45 m down is 0.83 m away, 33 degrees below level).
@@ -118,6 +124,22 @@ namespace ScrubIn
             Apply();
         }
 
+        public void SetScale(float scale)
+        {
+            Scale = Mathf.Clamp(scale, MinScale, MaxScale);
+            Apply();
+        }
+
+        /// <summary>Sets the pivot (wound) position and yaw directly (drag to move / rotate). Ends gaze-following.</summary>
+        public void SetPivotYaw(Vector3 pivot, float yaw)
+        {
+            Following = false;
+            PivotWorld = pivot;
+            Yaw = Mathf.Repeat(yaw + 180f, 360f) - 180f;
+            Placed = true;
+            Apply();
+        }
+
         public void SetLocked(bool locked)
         {
             if (Locked == locked) return;
@@ -163,6 +185,8 @@ namespace ScrubIn
             Vector3 direction = Quaternion.AngleAxis(pitch, right) * flat;
 
             Vector3 targetPivot = _head.position + direction * FollowDistance;
+            // A real table under the gaze: rest the arm on it (the wound skin sits -TableY above the table).
+            if (SurfaceTarget.HasValue) targetPivot = SurfaceTarget.Value + Vector3.up * (-ForearmShape.TableY * Scale);
             float targetYaw = Mathf.Atan2(flat.x, flat.z) * Mathf.Rad2Deg;
 
             float k = 1f - Mathf.Exp(-FollowRate * Time.deltaTime);
