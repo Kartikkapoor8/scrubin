@@ -13,10 +13,12 @@ namespace ScrubIn
     {
         const float RepeatDelay = 0.35f;
         const float RepeatInterval = 0.05f;
+        const float FastAfter = 1.2f;
 
         ScrubInBootstrap _bootstrap;
         ScrubInContext _ctx;
         readonly Dictionary<KeyCode, float> _nextRepeat = new Dictionary<KeyCode, float>();
+        readonly Dictionary<KeyCode, float> _heldSince = new Dictionary<KeyCode, float>();
 
         public void Init(ScrubInBootstrap bootstrap, ScrubInContext ctx)
         {
@@ -42,42 +44,42 @@ namespace ScrubIn
             float turn = fine ? 0.5f : 2f;
             float tilt = fine ? 0.25f : 1f;
 
-            if (Pressed(KeyCode.LeftArrow)) alignment.Nudge(-move, 0f, 0f);
-            if (Pressed(KeyCode.RightArrow)) alignment.Nudge(move, 0f, 0f);
-            if (Pressed(KeyCode.UpArrow)) alignment.Nudge(0f, 0f, move);
-            if (Pressed(KeyCode.DownArrow)) alignment.Nudge(0f, 0f, -move);
-            if (Pressed(KeyCode.PageUp)) alignment.Nudge(0f, move, 0f);
-            if (Pressed(KeyCode.PageDown)) alignment.Nudge(0f, -move, 0f);
+            float right = move * (Steps(KeyCode.RightArrow) - Steps(KeyCode.LeftArrow));
+            float away = move * (Steps(KeyCode.UpArrow) - Steps(KeyCode.DownArrow));
+            float up = move * (Steps(KeyCode.PageUp) - Steps(KeyCode.PageDown));
+            if (right != 0f || up != 0f || away != 0f) alignment.Nudge(right, up, away);
 
-            if (Pressed(KeyCode.Q)) alignment.Rotate(-turn, 0f, 0f);
-            if (Pressed(KeyCode.E)) alignment.Rotate(turn, 0f, 0f);
-            if (Pressed(KeyCode.Z)) alignment.Rotate(0f, 0f, -turn);
-            if (Pressed(KeyCode.X)) alignment.Rotate(0f, 0f, turn);
-            if (Pressed(KeyCode.Alpha1)) alignment.Rotate(0f, tilt, 0f);
-            if (Pressed(KeyCode.Alpha2)) alignment.Rotate(0f, -tilt, 0f);
+            float yaw = turn * (Steps(KeyCode.E) - Steps(KeyCode.Q));
+            float roll = turn * (Steps(KeyCode.X) - Steps(KeyCode.Z));
+            float pitch = tilt * (Steps(KeyCode.Alpha1) - Steps(KeyCode.Alpha2));
+            if (yaw != 0f || pitch != 0f || roll != 0f) alignment.Rotate(yaw, pitch, roll);
 
-            if (Pressed(KeyCode.LeftBracket)) alignment.ScaleBy(1f / 1.01f);
-            if (Pressed(KeyCode.RightBracket)) alignment.ScaleBy(1.01f);
+            int grow = Steps(KeyCode.RightBracket) - Steps(KeyCode.LeftBracket);
+            if (grow != 0) alignment.ScaleBy(Mathf.Pow(1.01f, grow));
 
             if (Input.GetKeyDown(KeyCode.C)) _bootstrap.Recenter();
         }
 
-        // True on the frame the key goes down, then repeatedly while it is held.
-        bool Pressed(KeyCode key)
+        // How many steps a key asks for this frame: 0 if none, 1 on a tap and while it repeats, 4 once it has
+        // been held for over a second. Taps stay precise; holding a key covers real distance quickly.
+        int Steps(KeyCode key)
         {
             float now = Time.unscaledTime;
             if (Input.GetKeyDown(key))
             {
+                _heldSince[key] = now;
                 _nextRepeat[key] = now + RepeatDelay;
-                return true;
+                return 1;
             }
+
             float next;
             if (Input.GetKey(key) && _nextRepeat.TryGetValue(key, out next) && now >= next)
             {
                 _nextRepeat[key] = now + RepeatInterval;
-                return true;
+                float since;
+                return _heldSince.TryGetValue(key, out since) && now - since > FastAfter ? 4 : 1;
             }
-            return false;
+            return 0;
         }
 
 #if UNITY_EDITOR
@@ -119,7 +121,7 @@ namespace ScrubIn
             {
                 GUILayout.Label("Alignment UNLOCKED.  L = lock when the outline sits on the arm.", _text);
                 GUILayout.Label("Arrows move 5 mm  |  PgUp/PgDn height  |  Q/E yaw 2\u00B0  |  Z/X roll  |  1/2 pitch  |  [ ] scale  |  Shift = fine", _text);
-                GUILayout.Label("C = re-place 0.7 m in front of the wearer, 0.45 m below their head", _text);
+                GUILayout.Label("Hold a key to repeat (it speeds up after a second)  |  C = re-place 0.7 m in front of the wearer, 0.45 m below their head", _text);
             }
 
             Vector3 p = a.PivotWorld;

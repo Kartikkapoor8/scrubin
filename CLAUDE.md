@@ -212,7 +212,7 @@ defaults are used and the editor legend shows a warning.
 | `H` | Hide / show all HUD |
 | `G` | Ask the attending (Phase 2) |
 
-Keys repeat when held. On the HoloLens, air tap = context action (next step, or stitch during `stitch`).
+Keys repeat when held and speed up after a second. On the HoloLens, air tap = context action (next step, or stitch during `stitch`).
 A small operator legend is drawn with IMGUI in the editor Game view only; it never reaches the headset.
 Without a headset, the editor runs a **desktop preview**: right-drag orbits, scroll zooms.
 
