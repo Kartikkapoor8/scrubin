@@ -270,7 +270,7 @@ export class AttendingBrain {
         if (body.error === 'not_configured') {
           this.wanted = false;
           this.mic.stop();
-          this.setState('error', 'Gemini is not set up: add GEMINI_API_KEY to vision/.env.local and restart');
+          this.setState('error', 'Gemini is not set up: add GEMINI_API_KEY to vision/.env.local (no restart needed), then press G');
           return;
         }
         throw new Error(body.detail || `token request failed (${res.status})`);

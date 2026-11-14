@@ -18,7 +18,8 @@
     "@fontsource-variable/jetbrains-mono": "^5.0.0",
     "@fontsource-variable/space-grotesk": "^5.0.0",
     "@google/genai": "^3.3.0",
-    "@mediapipe/tasks-vision": "^1.2.3"
+    "@mediapipe/tasks-vision": "^1.2.3",
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "playwright-core": "^1.65.1",

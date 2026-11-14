@@ -24,6 +24,7 @@ export class Hud {
   private bannerText: HTMLSpanElement;
   private help: HTMLDivElement;
   private helpGrid: HTMLDivElement;
+  private remoteInfo: HTMLDivElement;
   private noticeTimer = 0;
   private lastFallback = '';
 
@@ -56,8 +57,14 @@ export class Hud {
     this.help = add(this.root, el('div', 'help'));
     add(this.help, el('div', 'help__title', 'Operator keys'));
     this.helpGrid = add(this.help, el('div', 'help__grid'));
+    this.remoteInfo = add(this.help, el('div', 'help__remote'));
     add(this.help, el('div', 'help__note', 'Only the operator needs this list. Press ? to hide it.'));
     this.setKeys(KEYS);
+  }
+
+  /** Where a phone finds the remote, and its PIN. Shown with the key list. */
+  setRemoteInfo(text: string): void {
+    this.remoteInfo.textContent = text;
   }
 
   /** Adds a chip to the status row (tracking, hand, microphone...). Returns it so its owner can update it. */

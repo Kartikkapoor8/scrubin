@@ -10,8 +10,11 @@ import path from 'node:path';
 import { currentConfig, VISION_ROOT } from './env.mjs';
 import { createRecorder } from './recorder.mjs';
 import { createRelay } from './relay.mjs';
+import { createRemote } from './remote.mjs';
 
 const DEV = process.argv.includes('--dev');
+// The phone remote is the one thing other devices may reach. VISION_REMOTE=0 keeps the server to this Mac only.
+const REMOTE_ON = process.env.VISION_REMOTE !== '0';
 const config = currentConfig();
 const recorder = createRecorder(path.join(VISION_ROOT, 'media'));
 const relay = createRelay(() => currentConfig().hololens, recorder);
@@ -83,6 +86,7 @@ async function handleApi(req, res, url) {
         .sort((a, b) => b.t - a.t).map((x) => x.f);
     } catch { /* no media folder yet */ }
     return json(res, 200, {
+      remote: { enabled: remote.enabled, pin: remote.pin, addresses: remote.addresses(config.port) },
       hololens: { configured: relay.status.configured },
       gemini: { configured: Boolean(gemini && gemini.configured), model: gemini ? gemini.model : '' },
       clips,
@@ -106,11 +110,13 @@ let vite = null;
 
 const server = http.createServer(async (req, res) => {
   try {
+    const url = new URL(req.url, 'http://localhost');
+    // The phone remote's page: the only thing served to other devices.
+    if (remote.handlePage(req, res, url)) return;
     if (!isLocal(req)) {
       res.writeHead(403);
       return res.end('VIPER Vision only answers requests from this Mac.');
     }
-    const url = new URL(req.url, 'http://localhost');
     if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
 
     // Recorded clips dropped into vision/media/ (gitignored) are served at /media/<name>.
@@ -137,14 +143,23 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+const remote = createRemote(server, REMOTE_ON);
+
 if (DEV) {
   // Vite runs inside this server, hot-reload socket included, so the whole app is one port.
   const { createServer } = await import('vite');
   vite = await createServer({ root: VISION_ROOT, server: { middlewareMode: true, hmr: { server } }, appType: 'spa' });
 }
 
-server.listen(config.port, '127.0.0.1', () => {
+server.listen(config.port, REMOTE_ON ? '0.0.0.0' : '127.0.0.1', () => {
   console.log(`\n  VIPER Vision  ${DEV ? '(dev)' : ''}  http://localhost:${config.port}\n`);
   console.log(`  HoloLens stream : ${relay.status.configured ? 'configured' : 'not configured yet (add vision/.env.local; it is picked up without a restart)'}`);
-  console.log(`  Gemini attending: ${gemini && gemini.configured ? 'configured' : 'not configured'}\n`);
+  console.log(`  Gemini attending: ${gemini && gemini.configured ? 'configured' : 'not configured'}`);
+  if (REMOTE_ON) {
+    console.log(`  Phone remote    : PIN ${remote.pin}  (same Wi-Fi; only this page is reachable from other devices)`);
+    for (const address of remote.addresses(config.port)) console.log(`                    ${address}`);
+  } else {
+    console.log('  Phone remote    : off (VISION_REMOTE=0)');
+  }
+  console.log('');
 });

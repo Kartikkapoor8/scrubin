@@ -10,6 +10,7 @@ import { InputManager } from './input/manager';
 import type { SourceKind } from './input/types';
 import { Sounds } from './app/audio';
 import { StreamRecording } from './app/recording';
+import { connectRemote } from './app/remote';
 import { AttendingBrain } from './brain/live';
 import type { BrainHost, Structure } from './brain/tools';
 import { AnatomyLayer } from './overlay/layers/anatomy';
@@ -36,6 +37,7 @@ import { TitleCard } from './ui/title';
 import { VitalsPanel } from './ui/vitals';
 
 interface ServerConfig {
+  remote?: { enabled: boolean; pin: string; addresses: string[] };
   hololens: { configured: boolean };
   gemini: { configured: boolean; model: string };
   clips: string[];
@@ -286,6 +288,24 @@ async function boot(): Promise<void> {
     },
   };
   procedure.on(() => { lastActivity = performance.now(); });
+
+  // The phone remote: same actions, from a phone on the same network.
+  const remoteChip = hud.addChip('Remote');
+  remoteChip.show(false);
+  connectRemote(actions, () => ({
+    title: procedure.step.title,
+    index: procedure.index === 0 ? 'Ready' : `Step ${procedure.index} of ${procedure.steps.length - 1}`,
+    sutures: ['plan', 'stitch', 'complete'].includes(procedure.step.id) ? `Sutures ${procedure.stitchesDone}/${procedure.count}` : '',
+    attending: brain.state === 'off' ? '' : brain.state === 'error' ? 'Attending offline'
+      : brain.state === 'hearing' ? 'Listening' : brain.state === 'thinking' ? 'Thinking'
+      : brain.state === 'answering' ? 'Answering' : brain.state === 'connecting' ? 'Attending connecting' : 'Attending ready',
+  }), (count) => {
+    remoteChip.show(count > 0);
+    remoteChip.set(count === 1 ? 'Remote connected' : `${count} remotes`, 'ok');
+  });
+  if (config.remote?.enabled) {
+    hud.setRemoteInfo(`Phone remote (same Wi-Fi):  ${config.remote.addresses.join('   or   ')}   \u00B7   PIN ${config.remote.pin}`);
+  }
 
   // ----- Input -----
   const input = new InputManager(video, { hololens: config.hololens.configured }, (snapshot) => {

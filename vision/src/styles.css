@@ -1225,3 +1225,18 @@ body {
 .hud--snap * {
   transition: none !important;
 }
+
+.help__remote {
+  margin-top: calc(var(--u) * 1.6);
+  padding-top: calc(var(--u) * 1.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: var(--font-mono);
+  font-size: calc(var(--u) * 1.25);
+  line-height: 1.5;
+  color: var(--green);
+  user-select: text;
+}
+.help__remote:empty { display: none; }
+.help { width: min(calc(var(--u) * 96), 90vw); }
+.help__row { font-size: calc(var(--u) * 1.4); }
+.help__keys { min-width: calc(var(--u) * 7.5); font-size: calc(var(--u) * 1.2); }
