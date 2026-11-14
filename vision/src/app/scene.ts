@@ -45,6 +45,8 @@ export interface Scene {
   toolDistanceMm: number;
   /** App time at which the wound-lock brackets should snap in again (set by the scan as it passes the wound). */
   relockAt: number;
+  /** A structure the attending is pointing at ('' = none) and the app time the highlight ends. */
+  highlight: { structure: string; until: number };
 }
 
 /**
@@ -64,8 +66,10 @@ export class Appear {
     return this.on;
   }
 
-  update(on: boolean, t: number, dt: number): number {
+  /** `replayedAt`: an app time at which the group was asked to arrive again; its parts re-run from then. */
+  update(on: boolean, t: number, dt: number, replayedAt = -1e9): number {
     if (on && !this.on) this.since = t;
+    if (on && replayedAt > this.since) this.since = replayedAt;
     this.on = on;
     const target = on ? 1 : 0;
     this.value += (target - this.value) * damp(target > this.value ? this.rateIn : this.rateOut, dt);

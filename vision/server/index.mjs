@@ -93,10 +93,6 @@ async function handleApi(req, res, url) {
 }
 
 let vite = null;
-if (DEV) {
-  const { createServer } = await import('vite');
-  vite = await createServer({ root: VISION_ROOT, server: { middlewareMode: true }, appType: 'spa' });
-}
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -130,6 +126,12 @@ const server = http.createServer(async (req, res) => {
     else res.end();
   }
 });
+
+if (DEV) {
+  // Vite runs inside this server, hot-reload socket included, so the whole app is one port.
+  const { createServer } = await import('vite');
+  vite = await createServer({ root: VISION_ROOT, server: { middlewareMode: true, hmr: { server } }, appType: 'spa' });
+}
 
 server.listen(config.port, '127.0.0.1', () => {
   console.log(`\n  VIPER Vision  ${DEV ? '(dev)' : ''}  http://localhost:${config.port}\n`);

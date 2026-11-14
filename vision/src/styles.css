@@ -664,6 +664,15 @@ body {
   50% { transform: scale(1.5); }
 }
 
+.attending__title {
+  font-family: var(--font-mono);
+  font-size: calc(var(--u) * 0.98);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
 .attending__state {
   margin-left: auto;
   font-family: var(--font-mono);

@@ -9,6 +9,8 @@ import { Viewport } from './core/viewport';
 import { InputManager } from './input/manager';
 import type { SourceKind } from './input/types';
 import { Sounds } from './app/audio';
+import { AttendingBrain } from './brain/live';
+import type { BrainHost, Structure } from './brain/tools';
 import { DebugLayer } from './overlay/layers/debug';
 import { HandLayer } from './overlay/layers/hand';
 import { MeasureLayer } from './overlay/layers/measure';
@@ -49,6 +51,9 @@ const KEYS: Array<[string, string]> = [
   ['A', 'Autoplay (for recording)'],
   ['H', 'Hide every overlay (clean picture)'],
   ['N', 'Sound on / off'],
+  ['G', 'Gemini attending: microphone on / off'],
+  ['V', 'Attending speaks its answers aloud: on / off'],
+  ['L', 'Send the attending the current picture'],
   ['1 2 3 4', 'Input: HoloLens / webcam / video file / simulated arm'],
   ['K', 'Pick the marker colour: press K, then click the marker line'],
   ['M', 'Next marker colour preset (green, magenta, blue, orange)'],
@@ -101,6 +106,7 @@ async function boot(): Promise<void> {
     aligned: false,
     toolDistanceMm: -1,
     relockAt: -1e9,
+    highlight: { structure: '', until: 0 },
   };
 
   renderer.add(new ScanLayer(scene));
@@ -137,6 +143,91 @@ async function boot(): Promise<void> {
   const autoChip = hud.addChip('Autoplay');
 
   if (params.get('hands') !== '0') void hands.start();
+
+  // ----- The Gemini attending -----
+  let appTime = 0;
+  const viewCanvas = document.createElement('canvas');
+  const brainHost: BrainHost = {
+    describeState: () => {
+      const step = procedure.step;
+      const total = procedure.steps.length - 1;
+      const where = procedure.index === 0 ? 'Standing by; the procedure has not started.' : `Step ${procedure.index} of ${total}: ${step.title}.`;
+      const sutures = `Sutures placed: ${procedure.stitchesDone} of ${procedure.count}.`;
+      return `${where} ${sutures} Wound tracking: ${tracker.pose.locked ? 'locked' : 'searching'}.`;
+    },
+    stateData: () => ({
+      step: procedure.step.id,
+      stepNumber: procedure.index,
+      stepCount: procedure.steps.length - 1,
+      stepTitle: procedure.step.title,
+      instruction: procedure.step.line,
+      suturesPlaced: procedure.stitchesDone,
+      suturesPlanned: procedure.count,
+      woundTracked: tracker.pose.locked,
+      handOnTarget: scene.aligned,
+    }),
+    nextStep: () => procedure.next(),
+    previousStep: () => procedure.back(),
+    repeatStep: () => procedure.replay(),
+    goToStep: (id) => {
+      if (!procedure.steps.some((s) => s.id === id)) return false;
+      procedure.goToId(id as StepId);
+      return true;
+    },
+    highlight: (structure: Structure) => {
+      scene.highlight = { structure, until: appTime + 7 };
+    },
+    captureView: () => {
+      if (video.readyState < 2 || !video.videoWidth) return null;
+      // What the audience sees: the visible part of the picture with the overlays on it.
+      const width = 960;
+      const height = Math.round((width * stage.clientHeight) / Math.max(1, stage.clientWidth));
+      viewCanvas.width = width;
+      viewCanvas.height = height;
+      const ctx = viewCanvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.fillStyle = '#05080c';
+      ctx.fillRect(0, 0, width, height);
+      const k = width / stage.clientWidth;
+      try {
+        ctx.drawImage(video, view.toScreenX(0) * k, view.toScreenY(0) * k, view.videoW * view.scale * k, view.videoH * view.scale * k);
+        ctx.drawImage(overlayCanvas, 0, 0, width, height);
+        return viewCanvas.toDataURL('image/jpeg', 0.72).split(',')[1] || null;
+      } catch {
+        return null;
+      }
+    },
+  };
+
+  const brainChip = hud.addChip('Attending off');
+  const brain = new AttendingBrain(brainHost, attending, (state, detail) => {
+    if (state === 'error') {
+      brainChip.set('Attending offline', 'bad');
+      if (detail) hud.notice(detail, 6000);
+    } else if (state === 'off') brainChip.set('Attending off', 'off');
+    else if (state === 'connecting') brainChip.set('Attending connecting', 'busy');
+    else if (state === 'listening') brainChip.set('Attending listening', 'ok');
+    else if (state === 'hearing') brainChip.set('Attending hears you', 'ok');
+    else if (state === 'thinking') brainChip.set('Attending thinking', 'ok');
+    else brainChip.set('Attending answering', 'ok');
+  });
+  brain.voice = params.get('voice') === '1';
+  procedure.on((event) => {
+    if (event.type === 'step' || event.type === 'stitch-done' || event.type === 'reset') brain.noteState();
+  });
+  const toggleBrain = () => {
+    if (brain.running) {
+      brain.stop();
+      attending.hide();
+      return;
+    }
+    if (!config.gemini.configured) {
+      hud.notice('Gemini is not set up: add GEMINI_API_KEY to vision/.env.local and restart the server', 6000);
+      return;
+    }
+    void brain.start();
+  };
+  if (params.get('attending') === '1' && config.gemini.configured) void brain.start();
 
   // ----- Input -----
   const input = new InputManager(video, { hololens: config.hololens.configured }, (snapshot) => {
@@ -221,6 +312,9 @@ async function boot(): Promise<void> {
         hud.setHidden(scene.hidden);
         break;
       case 'n': case 'N': sounds.muted = !sounds.muted; hud.notice(`Sound ${sounds.muted ? 'off' : 'on'}`, 1500); break;
+      case 'g': case 'G': toggleBrain(); break;
+      case 'v': case 'V': brain.voice = !brain.voice; hud.notice(`Attending voice ${brain.voice ? 'on' : 'off'}`, 1500); break;
+      case 'l': case 'L': hud.notice(brain.sendView() ? 'Picture sent to the attending' : 'The attending is not connected', 1500); break;
       case '1': input.choose('hololens'); break;
       case '2': input.choose('webcam'); break;
       case '3': chooseFile(); break;
@@ -298,12 +392,17 @@ async function boot(): Promise<void> {
     },
     hands: () => ({ state: hands.state, detail: hands.detail, seen: hands.hands.length, ms: +hands.lastMs.toFixed(1), aligned: scene.aligned }),
     procedure: () => ({ step: procedure.step.id, stitchesDone: procedure.stitchesDone, stitching: procedure.stitch?.index ?? null, autoplay: procedure.autoplay }),
+    attending: () => ({ state: brain.state, detail: brain.detail, voice: brain.voice, highlight: scene.highlight.structure }),
     view: () => ({ zoom: +view.zoom.toFixed(2), fit: view.fit }),
   };
   (window as unknown as { __viper: unknown }).__viper = {
     parts: debug,
     debug: () => Object.fromEntries(Object.entries(debug).map(([name, read]) => [name, read()])),
     scene,
+    brain,
+    /** Ask the attending a typed question (needs the Gemini session to be on: press G first). */
+    ask: (text: string) => brain.ask(text),
+    captureView: () => brainHost.captureView(),
   };
 
   // ----- The frame loop -----
@@ -318,6 +417,7 @@ async function boot(): Promise<void> {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     const t = (now - started) / 1000;
+    appTime = t;
 
     if (!frameCallbacks && video.currentTime !== lastVideoTime) {
       lastVideoTime = video.currentTime;

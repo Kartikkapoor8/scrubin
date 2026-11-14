@@ -75,6 +75,38 @@ Wording, counts and timings live in `src/procedure/data.ts`. **Autoplay** (`A`) 
 for recording, and stops on the score card; `?autoplay=1` in the address starts it at launch. Sounds are
 synthesised in the page (`N` mutes them; `?sound=0`).
 
+## The Gemini attending
+
+Press `G` to turn it on (the browser asks for the microphone the first time). The trainee asks out loud,
+"what's that artery?", and the answer appears on the Attending card: the question as it is heard, then the
+answer typed out, with the current step as context.
+
+- **Setup:** put `GEMINI_API_KEY` in `vision/.env.local` and restart the server. The chip at the bottom
+  shows "Attending listening" when it is connected.
+- **Model:** `gemini-3.8-live`, the default Live model in Google's docs when this was built (2026-11-14).
+  Set `GEMINI_LIVE_MODEL` to change it. It answers in speech; the card shows the transcript of what it says,
+  replaced by a written card when it sends one.
+- **The key stays on the server.** The page asks `POST /api/gemini-token` for an ephemeral token each time it
+  opens a session: single use, two minutes to start a session, thirty to talk, locked to that model.
+- **What it can do (tools):** `show_answer_card`, `highlight_structure` (radial artery, ulnar artery, veins,
+  median nerve, flexor tendons, danger zone, wound), `look_at_view` (it is sent the current picture with the
+  overlays, so it can answer "what am I looking at?"), `get_procedure_state`, `next_step`, `previous_step`,
+  `repeat_step`, `go_to_step`.
+- **Context:** the system prompt holds the procedure and the anatomy; the app also tells it, silently, every
+  time the step changes or a suture goes in.
+- **Voice:** `V` makes it speak its answers through the Mac as well. Off by default: a speaker near an open
+  microphone can make it interrupt itself. `L` sends it the current picture without being asked.
+- **It cannot break the demo.** If Gemini is unreachable or closes the session (connections last about ten
+  minutes), the chip says so and it reconnects by itself, resuming the conversation; everything else runs
+  without it. Replies that are not answers to something the trainee said are never shown.
+- **From the console:** `__viper.ask('what is that artery?')` asks in text (after `G`).
+
+Not yet run against the real API: there was no key on the machine this was built on. The token request was
+checked as far as Google's "API key not valid" reply, and the card, tools and step changes were exercised
+with simulated Live messages. First thing to check with a real key: press `G`, ask a question, watch the chip.
+If a session opens and closes at once, start the server with `GEMINI_TOKEN_UNLOCKED=1` (the token's model
+lock is the likeliest cause) and tell the Mac agent.
+
 ## Keys
 
 | Key | Action |
@@ -85,6 +117,7 @@ synthesised in the page (`N` mutes them; `?sound=0`).
 | `R` | Reset |
 | `A` | Autoplay (for recording the video) |
 | `H` | Hide every overlay |
+| `G` / `V` / `L` | Gemini attending on or off / speak answers aloud / send it the current picture |
 | `T` | Zoom toward the wound while planning and stitching: on / off |
 | `F` / `O` | Full screen / fill the screen or show the whole picture |
 | `?` | The full key list, on screen |

@@ -16,6 +16,7 @@ const STATE_TEXT: Record<AttendingState, string> = {
 export class AttendingCard {
   private root: HTMLDivElement;
   private state: HTMLSpanElement;
+  private title: HTMLSpanElement;
   private question: HTMLDivElement;
   private shown: HTMLSpanElement;
   private rest: HTMLSpanElement;
@@ -23,12 +24,16 @@ export class AttendingCard {
   private count = 0;
   private timer = 0;
   private hideTimer = 0;
+  /** More text may still arrive (a streamed answer): do not start the hide countdown yet. */
+  private open = false;
+  private hold = 6;
 
   constructor(parent: HTMLElement) {
     this.root = add(parent, el('div', 'panel attending'));
     const head = add(this.root, el('div', 'attending__head'));
     add(head, el('span', 'attending__orb'));
     add(head, el('span', 'panel__label', 'Attending'));
+    this.title = add(head, el('span', 'attending__title'));
     this.state = add(head, el('span', 'attending__state'));
     this.question = add(this.root, el('div', 'attending__question'));
     const body = add(this.root, el('div', 'attending__text'));
@@ -36,29 +41,37 @@ export class AttendingCard {
     this.rest = add(body, el('span', 'attending__rest'));
   }
 
-  /** Type a line out. `hold` = seconds to keep the card up after the typing finishes (0 = until replaced). */
-  say(text: string, options: { question?: string; hold?: number } = {}): void {
-    window.clearInterval(this.timer);
-    window.clearTimeout(this.hideTimer);
+  /** Type a complete line out. `hold` = seconds to keep the card up afterwards (0 = until replaced). */
+  say(text: string, options: { question?: string; title?: string; hold?: number } = {}): void {
     this.full = text;
     this.count = 0;
-    this.question.textContent = options.question ? `“${options.question}”` : '';
-    this.question.classList.toggle('attending__question--on', Boolean(options.question));
-    this.render();
-    this.root.classList.add('panel--on');
-    this.setState('answering');
+    this.open = false;
+    this.hold = options.hold ?? 6;
+    this.setQuestion(options.question || '');
+    this.title.textContent = options.title ? `· ${options.title}` : '';
+    this.begin();
+  }
 
-    const hold = options.hold ?? 6;
-    this.timer = window.setInterval(() => {
-      // Whole words arrive slightly faster than single letters would; it reads as speech rather than typing.
-      this.count = Math.min(this.full.length, this.count + 2);
-      this.render();
-      if (this.count >= this.full.length) {
-        window.clearInterval(this.timer);
-        this.setState('idle');
-        if (hold > 0) this.hideTimer = window.setTimeout(() => this.hide(), hold * 1000);
-      }
-    }, 28);
+  /**
+   * Show an answer that is still arriving: call again with the longer text as more comes in, then finish().
+   * The typing carries on from where it was; it never starts over.
+   */
+  stream(text: string, question = ''): void {
+    if (!this.open) {
+      this.count = 0;
+      this.open = true;
+      this.title.textContent = '';
+    }
+    this.full = text;
+    if (question) this.setQuestion(question);
+    this.begin();
+  }
+
+  /** No more text is coming: once it is typed out, keep the card up for `hold` seconds (0 = until replaced). */
+  finish(hold = 8): void {
+    this.open = false;
+    this.hold = hold;
+    this.begin();
   }
 
   setState(state: AttendingState): void {
@@ -70,19 +83,53 @@ export class AttendingCard {
     }
   }
 
-  /** Show the card with a status only (for example while Gemini is listening), keeping any text. */
+  /** Bring the card up with a status and the question so far (while Gemini is listening or thinking). */
   wake(state: AttendingState, question = ''): void {
     if (question) {
-      this.question.textContent = `“${question}”`;
-      this.question.classList.add('attending__question--on');
+      this.setQuestion(question);
+      // A new question: the previous answer no longer belongs on the card.
+      if (!this.open && this.count >= this.full.length) {
+        this.full = '';
+        this.count = 0;
+        this.title.textContent = '';
+        this.render();
+      }
     }
     this.setState(state);
   }
 
   hide(): void {
     window.clearInterval(this.timer);
+    this.timer = 0;
     window.clearTimeout(this.hideTimer);
+    this.open = false;
     this.root.classList.remove('panel--on');
+  }
+
+  private setQuestion(question: string): void {
+    this.question.textContent = question ? `\u201C${question}\u201D` : '';
+    this.question.classList.toggle('attending__question--on', Boolean(question));
+  }
+
+  private begin(): void {
+    window.clearTimeout(this.hideTimer);
+    this.root.classList.add('panel--on');
+    this.render();
+    if (this.count < this.full.length) this.setState('answering');
+    if (this.timer) return;
+    this.timer = window.setInterval(() => {
+      if (this.count < this.full.length) {
+        // Two letters a tick: it reads as speech rather than as typing.
+        this.count = Math.min(this.full.length, this.count + 2);
+        this.render();
+        return;
+      }
+      if (this.open) return; // typed everything so far; more is on its way
+      window.clearInterval(this.timer);
+      this.timer = 0;
+      this.setState('idle');
+      if (this.hold > 0) this.hideTimer = window.setTimeout(() => this.hide(), this.hold * 1000);
+    }, 28);
   }
 
   private render(): void {

@@ -20,7 +20,7 @@ export class MeasureLayer implements Layer {
     const { procedure, tracker, settings, hidden, marker } = this.scene;
     const pose = tracker.pose;
     const on = !hidden && procedure.step.id === 'assess';
-    const presence = this.presence.update(on, t, dt) * pose.confidence;
+    const presence = this.presence.update(on, t, dt, procedure.replayedAt) * pose.confidence;
     if (presence <= 0.003) return;
 
     const w = new WoundSpace(pose, view, settings.acrossScale);

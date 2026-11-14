@@ -31,6 +31,8 @@ export class Procedure {
   index = 0;
   /** App time the current step was entered. */
   stepStartedAt = 0;
+  /** App time the current step was last asked to play again (see replay()). */
+  replayedAt = -1e9;
   stitchesDone = 0;
   stitch: StitchRun | null = null;
   autoplay = false;
@@ -137,6 +139,14 @@ export class Procedure {
 
   next(): void {
     this.goTo(this.index + 1);
+  }
+
+  /** Play the current step's entrance again (the attending's "repeat that" tool). */
+  replay(): void {
+    this.stepStartedAt = this.now;
+    this.replayedAt = this.now;
+    this.nextAutoAt = this.now + this.step.duration;
+    this.emit({ type: 'step', step: this.step, index: this.index, previous: this.step.id });
   }
 
   back(): void {

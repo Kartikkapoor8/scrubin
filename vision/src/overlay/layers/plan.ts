@@ -24,8 +24,8 @@ export class PlanLayer implements Layer {
     const step = procedure.step.id;
 
     const wanted = !hidden && (step === 'plan' || step === 'stitch' || step === 'complete');
-    const presence = this.presence.update(wanted, t, dt) * pose.confidence;
-    const rulerOn = this.ruler.update(wanted && step === 'plan', t, dt) * pose.confidence;
+    const presence = this.presence.update(wanted, t, dt, procedure.replayedAt) * pose.confidence;
+    const rulerOn = this.ruler.update(wanted && step === 'plan', t, dt, procedure.replayedAt) * pose.confidence;
     if (presence <= 0.003) return;
 
     const w = new WoundSpace(pose, view, settings.acrossScale);
