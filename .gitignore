@@ -1,0 +1,46 @@
+# ---- Unity generated ----
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# ---- IDE / solution files (Unity regenerates these) ----
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.unityproj
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+.vs/
+.vscode/
+.idea/
+.gradle/
+
+# ---- Unity misc ----
+sysinfo.txt
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+crashlytics-build.properties
+/Assets/Plugins/Editor/JetBrains*
+
+# ---- Secrets (Phase 2: Gemini key). Never commit. ----
+/Assets/StreamingAssets/secrets.json
+/Assets/StreamingAssets/secrets.json.meta
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+Desktop.ini

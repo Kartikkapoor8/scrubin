@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "title": "ScrubIn · Surgical Training",
+  "disclaimer": "Simulated training · not medical guidance",
+  "patient": {
+    "name": "Training Patient 01",
+    "procedure": "Laceration repair",
+    "site": "L forearm"
+  },
+  "vitals": {
+    "hr": 72,
+    "bp": "118/76",
+    "spo2": 98
+  },
+  "wound": {
+    "xStart": 0.100,
+    "xEnd": 0.142,
+    "z": 0.0,
+    "label": "42 mm"
+  },
+  "sutures": {
+    "count": 5,
+    "firstX": 0.105,
+    "spacing": 0.008,
+    "bite": 0.005,
+    "measuredSpacingMm": [0, 8.1, 7.8, 7.9, 7.8],
+    "feedback": "Suture {n}/{count} · spacing {spacing} mm {ok} · depth {ok}",
+    "attendingLines": [
+      "Good first bite. Hold that depth.",
+      "Nice. Keep the spacing even.",
+      "Halfway. Tension looks right.",
+      "One more after this.",
+      "That is the last one. Clean work."
+    ]
+  },
+  "score": {
+    "summary": "{done}/{count} sutures · avg spacing {avg} mm · time {time}"
+  },
+  "steps": [
+    {
+      "id": "boot",
+      "title": "Scanning field",
+      "attending": "Welcome to ScrubIn. Hold still while I scan the field.",
+      "layers": ["title", "scan"],
+      "highlights": [],
+      "duration": 7.0
+    },
+    {
+      "id": "assess",
+      "title": "Assess the wound",
+      "attending": "Training Patient 01. A 42 millimeter laceration on the forearm. Vitals are stable.",
+      "layers": ["patientCard", "vitals", "wound", "woundDims"],
+      "highlights": [],
+      "duration": 8.0
+    },
+    {
+      "id": "xray",
+      "title": "Know what is underneath",
+      "attending": "Look under the skin first. The radial artery runs right beside this wound. Stay out of the red zone.",
+      "layers": ["vitals", "wound", "anatomy", "dangerZone"],
+      "highlights": ["radialArtery", "dangerZone"],
+      "duration": 10.0
+    },
+    {
+      "id": "plan",
+      "title": "Plan the repair",
+      "attending": "Five simple interrupted sutures. Bites 5 mm from the edge, 8 mm apart, needle in at 90 degrees.",
+      "layers": ["vitals", "wound", "suturePlan", "dangerZone"],
+      "highlights": [],
+      "duration": 9.0
+    },
+    {
+      "id": "stitch",
+      "title": "Place the sutures",
+      "attending": "Go ahead. Enter at the dot, follow the arc, and tie it down.",
+      "layers": ["vitals", "wound", "suturePlan", "stitches", "feedback"],
+      "highlights": [],
+      "duration": 22.0
+    },
+    {
+      "id": "complete",
+      "title": "Procedure complete",
+      "attending": "Wound closed. Five for five, even spacing. Well done, doctor.",
+      "layers": ["stitches", "score"],
+      "highlights": [],
+      "duration": 10.0
+    }
+  ]
+}
