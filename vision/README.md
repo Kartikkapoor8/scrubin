@@ -38,6 +38,41 @@ overlays stay up, and it comes back by itself.
 
 You can also choose in the address: `?input=hololens|webcam|file|sim`, `?clip=name.mp4`, `?fit=contain`.
 
+## Tracking
+
+**The wound.** Draw the "laceration" on the forearm with a bright, saturated marker: a straight line 42 mm long
+(default colour: bright green). Every video frame the app keeps the pixels close to the marker's colour, picks
+the most line-like blob, fits a line to it and smooths it over time. Everything surgical is then drawn in
+millimetres from the centre of that line, so it stays pinned to the arm as the head moves. If a hand covers
+the marker for a moment the overlays hold their place; if it is gone for longer they fade out and come back.
+
+- `K`, then click the marker line: track that colour instead (kept between sessions). `M` steps through
+  presets (green, magenta, blue, orange).
+- `X` / `Z`: flip which end is suture 1 / which side of the wound is the far side.
+- `[` / `]`: squash or stretch the overlays across the arm, to match the camera's angle.
+- `D`: debug view. The marker pixels light up, with the fitted line and the timings.
+- Tips: matte marker, even light, nothing else of that colour in view (a green drape will confuse it: pick a
+  different marker colour). The length of the line is what turns pixels into millimetres, so draw it 42 mm.
+
+**The hand.** MediaPipe Hand Landmarker runs in the page. The working fingertip (or the pinch point, when
+thumb and index are together as if holding an instrument) gets a small reticle; when it is on the current
+suture target it reads **Aligned**. Hand tracking is a bonus: the space bar or a clicker registers the stitch
+whether or not it is aligned.
+
+## Keys
+
+| Key | Action |
+|-----|--------|
+| `Space` / clicker forward (`PageDown`) | Place the next suture; when none are left, next step |
+| `→` / `←` (or clicker back, `PageUp`) | Next / previous step |
+| `S` | Place the next suture |
+| `R` | Reset |
+| `A` | Autoplay (for recording the video) |
+| `H` | Hide every overlay |
+| `T` | Zoom toward the wound while planning and stitching: on / off |
+| `F` / `O` | Full screen / fill the screen or show the whole picture |
+| `?` | The full key list, on screen |
+
 ### The relay
 
 `server/relay.mjs` logs in to the headset's Device Portal and passes the live stream to the page

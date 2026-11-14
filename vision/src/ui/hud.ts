@@ -144,6 +144,12 @@ export class StatusChip {
     parent.insertBefore(this.root, parent.firstChild);
   }
 
+  /** Take the chip out of the row entirely (for states that are usually irrelevant, like autoplay). */
+  show(visible: boolean): void {
+    const display = visible ? '' : 'none';
+    if (this.root.style.display !== display) this.root.style.display = display;
+  }
+
   set(text: string, tone: 'ok' | 'busy' | 'bad' | 'off'): void {
     if (this.text.textContent !== text) this.text.textContent = text;
     for (const t of ['ok', 'busy', 'bad', 'off']) this.root.classList.toggle(`chip--${t}`, t === tone);
