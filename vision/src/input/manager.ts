@@ -67,7 +67,7 @@ export class InputManager {
 
   private create(kind: SourceKind): InputSource {
     switch (kind) {
-      case 'hololens': return new HoloLensSource('high');
+      case 'hololens': return new HoloLensSource('high', new URLSearchParams(location.search).get('hlmode') === 'progressive');
       case 'webcam': return new WebcamSource();
       case 'file': return this.file;
       case 'sim': return new SimulatedSource();

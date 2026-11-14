@@ -37,9 +37,11 @@ export function createGemini(config) {
         expireTime: new Date(now + SESSION_WINDOW_MS).toISOString(),
         httpOptions: { apiVersion: 'v1beta' },
       };
-      // Lock the token to the Live model, so it is useless for anything else if it leaked.
-      // GEMINI_TOKEN_UNLOCKED=1 skips the lock (only if a session refuses the page's own settings).
-      if (process.env.GEMINI_TOKEN_UNLOCKED !== '1') tokenConfig.liveConnectConstraints = { model };
+      // Lock the token to the Live model, so it is useless for anything else if it leaked. The page asks
+      // for an unlocked one (?lock=0) only after a locked session was refused; GEMINI_TOKEN_UNLOCKED=1
+      // never locks.
+      const wantsLock = new URL(req.url, 'http://localhost').searchParams.get('lock') !== '0';
+      if (wantsLock && process.env.GEMINI_TOKEN_UNLOCKED !== '1') tokenConfig.liveConnectConstraints = { model };
       const token = await client.authTokens.create({ config: tokenConfig });
       if (!token || !token.name) throw new Error('Gemini returned no token');
       return send(200, { token: token.name, model, expiresAt: tokenConfig.expireTime });

@@ -1,7 +1,7 @@
 import type { FunctionResponse, LiveServerMessage, Session } from '@google/genai';
 import type { AttendingCard } from '../ui/attending';
 import { Mic, VoicePlayer } from './mic';
-import { SILENT_TOOLS, STRUCTURES, SYSTEM_PROMPT, toolDeclarations, type BrainHost, type Structure } from './tools';
+import { SILENT_TOOLS, STRUCTURES, systemPrompt, toolDeclarations, type BrainHost, type Structure } from './tools';
 
 /**
  * off         not started
@@ -38,6 +38,18 @@ export class AttendingBrain {
   private retryDelay = 1000;
   private generation = 0;
 
+  /**
+   * How much of the Live API's optional machinery the session asks for. This was written without a key to
+   * try it against, so if a session is refused before it starts, the next attempt asks for less:
+   *   0  everything: tool behaviours, context compression, session resumption, model-locked token
+   *   1  plain tools, none of the optional session features, unlocked token
+   *   2  no tools at all: questions are still answered on the card from the spoken transcript
+   * The first level that works is kept.
+   */
+  private compat = 0;
+  private setupSeen = false;
+  private failuresAtLevel = 0;
+
   // The turn in progress.
   private question = '';
   private answer = '';
@@ -68,6 +80,7 @@ export class AttendingBrain {
   async start(): Promise<void> {
     if (this.wanted) return;
     this.wanted = true;
+    this.failuresAtLevel = 0;
     this.setState('connecting', 'Opening the microphone');
     try {
       await this.mic.start((chunk) => {
@@ -114,8 +127,10 @@ export class AttendingBrain {
 
     let token = '';
     let model = '';
+    this.setupSeen = false;
+    const level = this.compat;
     try {
-      const res = await fetch('/api/gemini-token', { method: 'POST', cache: 'no-store' });
+      const res = await fetch(`/api/gemini-token${level >= 1 ? '?lock=0' : ''}`, { method: 'POST', cache: 'no-store' });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (body.error === 'not_configured') {
@@ -141,13 +156,17 @@ export class AttendingBrain {
         model,
         config: {
           responseModalities: [genai.Modality.AUDIO],
-          systemInstruction: SYSTEM_PROMPT,
-          tools: [{ functionDeclarations: toolDeclarations(genai.Behavior.BLOCKING, genai.Behavior.NON_BLOCKING) }],
+          systemInstruction: systemPrompt(level < 2),
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          // Long demos: let the server trim old context instead of ending the session.
-          contextWindowCompression: { slidingWindow: {} },
-          sessionResumption: this.handle ? { handle: this.handle } : {},
+          ...(level === 0 ? {
+            tools: [{ functionDeclarations: toolDeclarations(genai.Behavior.BLOCKING, genai.Behavior.NON_BLOCKING) }],
+            // Long demos: let the server trim old context instead of ending the session.
+            contextWindowCompression: { slidingWindow: {} },
+            sessionResumption: this.handle ? { handle: this.handle } : {},
+          } : level === 1 ? {
+            tools: [{ functionDeclarations: toolDeclarations() }],
+          } : {}),
         },
         callbacks: {
           onopen: () => {
@@ -157,6 +176,11 @@ export class AttendingBrain {
           },
           onmessage: (message: LiveServerMessage) => {
             if (generation !== this.generation) return;
+            if (!this.setupSeen) {
+              // The server accepted this setup: remember that it works.
+              this.setupSeen = true;
+              this.failuresAtLevel = 0;
+            }
             try {
               this.handleMessage(message);
             } catch (err) {
@@ -169,6 +193,7 @@ export class AttendingBrain {
           onclose: (event: CloseEvent) => {
             if (generation !== this.generation) return;
             if (event.reason) console.warn('[attending] session closed:', event.code, event.reason);
+            if (!this.setupSeen && this.refused(event.reason || `closed with code ${event.code}`)) return;
             this.scheduleReconnect(event.reason ? `Gemini closed the session: ${event.reason.slice(0, 120)}` : 'Reconnecting to Gemini');
           },
         },
@@ -183,9 +208,33 @@ export class AttendingBrain {
     } catch (err) {
       if (generation === this.generation) {
         console.warn('[attending] could not open a session', err);
+        if (this.refused(err instanceof Error ? err.message : 'could not open a session')) return;
         this.scheduleReconnect('Could not open a Gemini session');
       }
     }
+  }
+
+  /**
+   * A session ended before the server ever answered. Twice at the same level: ask for less next time.
+   * Out of levels: stop and say why, rather than retrying for ever. Returns true if it stopped.
+   */
+  private refused(reason: string): boolean {
+    this.failuresAtLevel++;
+    if (this.failuresAtLevel < 2) return false;
+    this.failuresAtLevel = 0;
+    if (this.compat < 2) {
+      this.compat++;
+      this.handle = '';
+      console.warn(`[attending] session refused twice (${reason}); retrying with a simpler setup (level ${this.compat})`);
+      return false;
+    }
+    this.compat = 0;
+    this.wanted = false;
+    this.generation++;
+    this.session = null;
+    this.mic.stop();
+    this.setState('error', `Gemini would not start a session: ${reason.slice(0, 140)}`);
+    return true;
   }
 
   /** Tell the model where the procedure is. Sent when nobody is mid-sentence; the model does not reply. */
@@ -239,7 +288,7 @@ export class AttendingBrain {
     if (this.userSpoke) this.card.finish(9);
     this.turnActive = false;
     this.userSpoke = false;
-    if (this.wanted && this.session) this.setState('listening');
+    if (this.state !== 'off' && this.state !== 'error' && this.state !== 'connecting') this.setState(this.wanted ? 'listening' : 'off');
     this.flushState();
   }
 
@@ -309,7 +358,7 @@ export class AttendingBrain {
         }
         const functionResponse: FunctionResponse = { id: call.id, name, response };
         // Tools that only change the screen need no spoken follow-up.
-        if (SILENT_TOOLS.has(name)) (functionResponse as { scheduling?: string }).scheduling = 'SILENT';
+        if (this.compat === 0 && SILENT_TOOLS.has(name)) (functionResponse as { scheduling?: string }).scheduling = 'SILENT';
         responses.push(functionResponse);
       }
       try {

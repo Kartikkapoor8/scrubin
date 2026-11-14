@@ -110,15 +110,18 @@ answer typed out, with the current step as context.
 Not yet run against the real API: there was no key on the machine this was built on. The token request was
 checked as far as Google's "API key not valid" reply, and the card, tools and step changes were exercised
 with simulated Live messages. First thing to check with a real key: press `G`, ask a question, watch the chip.
-If a session opens and closes at once, start the server with `GEMINI_TOKEN_UNLOCKED=1` (the token's model
-lock is the likeliest cause) and tell the Mac agent.
+If Gemini refuses a session before it starts, the app steps down by itself: first to plain tools with an
+unlocked token and none of the optional session features, then to no tools at all (answers still appear on
+the card). If even that is refused it stops and shows Google's reason in the banner; the browser console has
+the detail. Tell the Mac agent which level it settled on (`__viper.brain` in the console shows `compat`).
 
 ## Keys
 
 | Key | Action |
 |-----|--------|
-| `Space` / clicker forward (`PageDown`) | Place the next suture; when none are left, next step |
-| `→` / `←` (or clicker back, `PageUp`) | Next / previous step |
+| `Space`, `→`, or a clicker's forward button | Place the next suture; when none are left, next step |
+| `←` or a clicker's back button | Previous step |
+| `Shift` + `→` | Next step, skipping any sutures not yet placed |
 | `S` | Place the next suture |
 | `R` | Reset |
 | `A` | Autoplay (for recording the video) |

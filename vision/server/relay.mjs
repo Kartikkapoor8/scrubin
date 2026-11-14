@@ -30,7 +30,15 @@ export function createRelay(config) {
     bytes: 0,
     since: 0,
     certSha256: '',
+    legacyTls: false,
   };
+
+  // HoloLens 1 runs a 2016-era Windows. If it cannot negotiate current TLS, the next attempt allows the
+  // older protocol versions and ciphers, for this one host only.
+  const tlsOptions = () => (status.legacyTls ? { minVersion: 'TLSv1', ciphers: 'DEFAULT:@SECLEVEL=0' } : {});
+  const looksLikeTlsMismatch = (err) =>
+    /EPROTO|ERR_SSL|ERR_TLS|wrong version|unsupported protocol|handshake failure|no shared cipher|protocol version|dh key too small/i
+      .test(`${err.code || ''} ${err.message || ''}`);
 
   function fail(res, code, error, detail) {
     status.state = 'error';
@@ -76,6 +84,7 @@ export function createRelay(config) {
       rejectUnauthorized: false,
       agent: false,
       timeout: CONNECT_TIMEOUT_MS,
+      ...tlsOptions(),
     });
 
     const finish = () => {
@@ -118,6 +127,10 @@ export function createRelay(config) {
 
     upstream.on('error', (err) => {
       if (finished) return;
+      if (!status.legacyTls && looksLikeTlsMismatch(err)) {
+        status.legacyTls = true;
+        console.warn(`[relay] TLS handshake with the headset failed (${err.code || err.message}); the next attempt allows older TLS.`);
+      }
       const code = err.message === 'timeout' ? 504 : 502;
       const detail =
         err.message === 'timeout' ? 'The headset did not answer. Is it on, awake and on the same network?'
@@ -184,6 +197,7 @@ export function createRelay(config) {
           rejectUnauthorized: false,
           agent: false,
           timeout: 3000,
+          ...tlsOptions(),
         },
         (up) => {
           up.resume();
@@ -193,7 +207,10 @@ export function createRelay(config) {
         },
       );
       request.on('timeout', () => request.destroy(new Error('timeout')));
-      request.on('error', (err) => resolve({ ok: false, error: 'unreachable', detail: err.code || err.message }));
+      request.on('error', (err) => {
+        if (!status.legacyTls && looksLikeTlsMismatch(err)) status.legacyTls = true;
+        resolve({ ok: false, error: 'unreachable', detail: err.code || err.message });
+      });
       request.end();
     });
   }

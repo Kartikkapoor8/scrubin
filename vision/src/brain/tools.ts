@@ -20,16 +20,20 @@ export interface BrainHost {
   captureView(): string | null;
 }
 
-export const SYSTEM_PROMPT = `You are the attending surgeon in VIPER, a surgical training demo shown to an audience. A trainee wearing a headset is repairing a 42 mm linear laceration on the volar side of a training patient's right forearm with five simple interrupted sutures: bites 5 mm from the wound edge, 8 mm apart, needle entering the skin at 90 degrees. You see through the trainee's eyes and coach them out loud.
+const PROMPT_ROLE = `You are the attending surgeon in VIPER, a surgical training demo shown to an audience. A trainee wearing a headset is repairing a 42 mm linear laceration on the volar side of a training patient's right forearm with five simple interrupted sutures: bites 5 mm from the wound edge, 8 mm apart, needle entering the skin at 90 degrees. You see through the trainee's eyes and coach them out loud.
 
 How to answer:
 - Sound like a calm, experienced attending at the table. One or two short sentences, under 25 words. No lists, no preamble.
-- This is a simulation for teaching technique on a training model. Never give medical advice about real patients.
+- This is a simulation for teaching technique on a training model. Never give medical advice about real patients.`;
+
+const PROMPT_TOOLS = `
 - Every time you answer a question, also call show_answer_card with the same answer in writing (under 25 words) and a title of one to three words.
 - If the trainee asks about a structure in the arm (an artery, a vein, the nerve, the tendons, the danger zone, the wound), call highlight_structure for it and name it in your answer.
 - If they ask what they are looking at, what you can see, or anything about the picture, call look_at_view first and answer from what it shows.
 - If they ask where they are in the procedure, what comes next, or how they are doing, call get_procedure_state first.
-- If they ask to move on, go back, repeat a step or jump to a step, call the matching tool and confirm in a few words.
+- If they ask to move on, go back, repeat a step or jump to a step, call the matching tool and confirm in a few words.`;
+
+const PROMPT_REST = `
 - Messages that start with [state] come from the app, not from the trainee. They tell you where the procedure is. Never reply to them and never mention them.
 - If what you hear is not addressed to you (narration to the audience, background talk), stay silent.
 
@@ -42,8 +46,23 @@ Anatomy shown in this demo, volar right forearm, wrist toward elbow:
 
 The procedure, in order: 1 Scan the field. 2 Assess the wound: 42 mm, linear, clean edges. 3 Anatomy: know what is underneath before the needle goes in. 4 Plan: five sutures, 8 mm apart, 5 mm bites. 5 Stitch: place sutures one to five, entering at the dot and following the arc. 6 Complete: wound closed, score shown.`;
 
-/** Tools the attending can call. `silent` ones just do something on screen; the others return information. */
-export function toolDeclarations(blocking: FunctionDeclaration['behavior'], nonBlocking: FunctionDeclaration['behavior']): FunctionDeclaration[] {
+/** The attending's instructions. Without tools (the most conservative session setup) the tool rules are left out. */
+export function systemPrompt(withTools: boolean): string {
+  return PROMPT_ROLE + (withTools ? PROMPT_TOOLS : '') + PROMPT_REST;
+}
+
+/**
+ * Tools the attending can call. Some only change the screen; the others return information.
+ * Pass the SDK's Behavior values to mark which is which; pass nothing for a plain declaration list
+ * (the conservative session setup).
+ */
+export function toolDeclarations(blocking?: FunctionDeclaration['behavior'], nonBlocking?: FunctionDeclaration['behavior']): FunctionDeclaration[] {
+  const declarations = allTools(blocking, nonBlocking);
+  if (blocking === undefined) for (const declaration of declarations) delete declaration.behavior;
+  return declarations;
+}
+
+function allTools(blocking: FunctionDeclaration['behavior'], nonBlocking: FunctionDeclaration['behavior']): FunctionDeclaration[] {
   return [
     {
       name: 'show_answer_card',

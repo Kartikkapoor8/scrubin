@@ -63,9 +63,10 @@ Notes for the wearer:
 - If the attending is slow or silent, carry on. The operator's space bar drives everything.
 
 Notes for the operator:
-- `Space` is the one button: it places a suture when there is one to place and otherwise moves on. A
-  presentation clicker's forward button does the same.
-- `←` goes back a step, `R` resets, `H` shows the clean picture, `A` plays the whole procedure by itself.
+- `Space` is the one button: it places a suture when there is one to place and otherwise moves on. `→` and a
+  presentation clicker's forward button do the same. Holding a key down counts once.
+- `←` (or the clicker's back button) goes back a step, `Shift` + `→` skips ahead, `R` resets, `H` shows the
+  clean picture, `A` plays the whole procedure by itself.
 - If the stream drops, the screen says "reconnecting" and holds the last frame. Keep going; it comes back.
 
 ## The demo video

@@ -22,8 +22,16 @@ export class HoloLensSource implements InputSource {
   private retryTimer = 0;
   private retryDelay = 500;
   private everLive = false;
+  /**
+   * 'mse' holds playback at the live edge. If the browser will not take the headset's stream that way, the
+   * source falls back to 'progressive': the stream is simply handed to the video element, the way the
+   * headset's own Device Portal page plays it. A little more delay, but it plays anything the browser can.
+   */
+  private mode: 'mse' | 'progressive';
 
-  constructor(private quality: 'high' | 'med' | 'low' = 'high') {}
+  constructor(private quality: 'high' | 'med' | 'low' = 'high', forceProgressive = false) {
+    this.mode = forceProgressive ? 'progressive' : 'mse';
+  }
 
   start(video: HTMLVideoElement, onStatus: (status: SourceStatus) => void): void {
     this.video = video;
@@ -46,6 +54,11 @@ export class HoloLensSource implements InputSource {
     window.clearInterval(this.chaseTimer);
     this.abort?.abort();
     this.abort = null;
+    if (this.mode === 'progressive' && this.video && this.video.src.includes('/api/stream')) {
+      // Drop the connection to the relay (and so to the headset) before opening another.
+      this.video.removeAttribute('src');
+      this.video.load();
+    }
     if (this.mediaSource && this.mediaSource.readyState === 'open') {
       try { this.mediaSource.endOfStream(); } catch { /* already closing */ }
     }
@@ -67,6 +80,10 @@ export class HoloLensSource implements InputSource {
   private async connect(): Promise<void> {
     if (this.stopped || !this.video) return;
     const video = this.video;
+    if (this.mode === 'progressive') {
+      this.playProgressive(video);
+      return;
+    }
     const abort = new AbortController();
     this.abort = abort;
 
@@ -99,10 +116,73 @@ export class HoloLensSource implements InputSource {
       await this.play(video, response.body, abort.signal);
       if (!abort.signal.aborted) this.scheduleRetry('The headset stream ended');
     } catch (err) {
-      if (!abort.signal.aborted) {
-        this.scheduleRetry(err instanceof Error && err.message ? err.message : 'The headset stream was interrupted');
+      if (abort.signal.aborted) return;
+      if (err instanceof FormatError || (err instanceof DOMException && err.name !== 'AbortError')) {
+        // The stream arrived but this way of playing it was refused: use the simpler way from now on.
+        console.warn('[hololens] low-latency playback refused the stream, falling back:', err.message);
+        this.teardown();
+        this.mode = 'progressive';
+        this.retryDelay = 300;
+        this.scheduleRetry('Switching playback method');
+        return;
       }
+      this.scheduleRetry(err instanceof Error && err.message ? err.message : 'The headset stream was interrupted');
     }
+  }
+
+  /** Fallback playback: give the relayed stream straight to the video element and watch that it keeps moving. */
+  private playProgressive(video: HTMLVideoElement): void {
+    video.srcObject = null;
+    video.src = `/api/stream?q=${this.quality}&t=${Date.now()}`;
+    void video.play().catch(() => {});
+
+    let lastTime = -1;
+    let movedAt = performance.now();
+    let announced = false;
+    window.clearInterval(this.chaseTimer);
+    this.chaseTimer = window.setInterval(() => {
+      const now = performance.now();
+      if (video.error) {
+        // The element gives no reason; ask the relay what is wrong with the headset.
+        window.clearInterval(this.chaseTimer);
+        fetch('/api/stream/probe', { cache: 'no-store' })
+          .then((res) => res.json())
+          .then((probe) => {
+            const detail =
+              probe.error === 'not_configured' ? 'Set HOLOLENS_IP, HOLOLENS_USER and HOLOLENS_PASS'
+              : probe.error === 'auth' ? 'The headset rejected the user name or password'
+              : probe.ok ? 'The browser could not play the stream' : 'The headset is not answering on the network';
+            if (!this.everLive && (probe.error === 'not_configured' || probe.error === 'auth')) {
+              this.teardown();
+              this.onStatus({ state: 'unavailable', detail });
+            } else {
+              this.scheduleRetry(detail);
+            }
+          })
+          .catch(() => this.scheduleRetry('The local relay is not answering'));
+        return;
+      }
+      if (video.currentTime !== lastTime) {
+        lastTime = video.currentTime;
+        movedAt = now;
+        if (!announced && video.readyState >= 2) {
+          announced = true;
+          this.everLive = true;
+          this.retryDelay = 500;
+          this.onStatus({ state: 'live', detail: '' });
+        }
+      } else if (now - movedAt > (announced ? 4000 : 9000)) {
+        this.scheduleRetry(announced ? 'The headset stream stalled' : 'The headset stream did not start');
+        return;
+      }
+      // Stay near the newest picture.
+      if (video.buffered.length > 0) {
+        const lag = video.buffered.end(video.buffered.length - 1) - video.currentTime;
+        if (lag > 3) video.currentTime = video.buffered.end(video.buffered.length - 1) - 0.5;
+        else video.playbackRate = lag > 1.2 ? 1.15 : 1;
+      }
+      if (video.paused) void video.play().catch(() => {});
+    }, 250);
   }
 
   private async play(video: HTMLVideoElement, body: ReadableStream<Uint8Array>, signal: AbortSignal): Promise<void> {
@@ -116,13 +196,13 @@ export class HoloLensSource implements InputSource {
       if (done) throw new Error('The headset closed the stream before any video arrived');
       head = concat(head, value);
       headerEnd = endOfMoov(head);
-      if (head.length > 4_000_000) throw new Error('The stream does not look like MP4 video');
+      if (head.length > 4_000_000) throw new FormatError('The stream does not look like MP4 video');
     }
 
     const codecs = sniffCodecs(head.subarray(0, headerEnd));
     const mime = `video/mp4; codecs="${codecs.join(', ')}"`;
     if (typeof MediaSource === 'undefined' || !MediaSource.isTypeSupported(mime)) {
-      throw new Error(`This browser cannot play the headset's video format (${codecs.join(', ')})`);
+      throw new FormatError(`This browser cannot play the headset's video format (${codecs.join(', ')})`);
     }
 
     const mediaSource = new MediaSource();
@@ -152,11 +232,11 @@ export class HoloLensSource implements InputSource {
       try {
         buffer.appendBuffer(next as BufferSource);
       } catch (err) {
-        failed = err instanceof Error ? err : new Error('append failed');
+        failed = new FormatError(err instanceof Error ? err.message : 'append failed');
       }
     };
     buffer.addEventListener('updateend', pump);
-    buffer.addEventListener('error', () => { failed = new Error('The browser rejected the video data'); });
+    buffer.addEventListener('error', () => { failed = new FormatError('The browser rejected the video data'); });
     pump();
 
     void video.play().catch(() => { /* autoplay is muted; a blocked play resolves on the next user input */ });
@@ -199,6 +279,9 @@ export class HoloLensSource implements InputSource {
     }
   }
 }
+
+/** The stream reached us but could not be played this way (as opposed to the network dropping). */
+class FormatError extends Error {}
 
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
   const out = new Uint8Array(a.length + b.length);

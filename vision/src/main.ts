@@ -46,8 +46,9 @@ async function loadConfig(): Promise<ServerConfig> {
 }
 
 const KEYS: Array<[string, string]> = [
-  ['Space', 'Place the next suture, or go to the next step (same as a clicker)'],
-  ['← →', 'Previous / next step'],
+  ['Space  →', 'Place the next suture, or go to the next step (a clicker does the same)'],
+  ['←', 'Previous step'],
+  ['Shift →', 'Next step, skipping any sutures not yet placed'],
   ['S', 'Place the next suture'],
   ['R', 'Reset the procedure'],
   ['A', 'Autoplay (for recording)'],
@@ -305,10 +306,14 @@ async function boot(): Promise<void> {
   window.addEventListener('pointermove', () => { lastPointer = performance.now(); });
   window.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
+    // A key held down must not run through the procedure: only the first press counts.
+    if (event.repeat) { event.preventDefault(); return; }
     sounds.unlock();
     switch (event.key) {
+      // Space and both kinds of clicker (PageDown or right arrow) do the same thing: the next suture if
+      // there is one to place, otherwise the next step. Shift + right arrow skips ahead regardless.
       case ' ': case 'PageDown': procedure.advance(); break;
-      case 'ArrowRight': procedure.next(); break;
+      case 'ArrowRight': if (event.shiftKey) procedure.next(); else procedure.advance(); break;
       case 'ArrowLeft': case 'PageUp': procedure.back(); break;
       case 's': case 'S': procedure.startStitch(); break;
       case 'r': case 'R': procedure.setAutoplay(false); procedure.reset(); break;
