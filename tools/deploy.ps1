@@ -96,14 +96,21 @@ function Install-Rest {
     $csrf = $script:DPSession.Cookies.GetCookies($base) | Where-Object Name -eq 'CSRF-Token' | Select-Object -First 1
     if ($csrf) { $null = $client.DefaultRequestHeaders.TryAddWithoutValidation('X-CSRF-Token', $csrf.Value) }
 
-    $form = New-Object System.Net.Http.MultipartFormDataContent
+    # Plain multipart format (as Microsoft's WindowsDevicePortalWrapper writes it): unquoted boundary in the
+    # Content-Type header and quoted name/filename without .NET's extra filename*= parameter. Device Portal's
+    # parser is stricter than most servers, so don't rely on .NET's defaults.
+    $boundary = [guid]::NewGuid().ToString('N')
+    $form = New-Object System.Net.Http.MultipartFormDataContent($boundary)
+    $null = $form.Headers.Remove('Content-Type')
+    $null = $form.Headers.TryAddWithoutValidation('Content-Type', "multipart/form-data; boundary=$boundary")
     $streams = @()
     foreach ($f in $files) {
         $fs = [IO.File]::OpenRead($f); $streams += $fs
         $sc = New-Object System.Net.Http.StreamContent($fs)
-        $sc.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('application/octet-stream')
         $name = [IO.Path]::GetFileName($f)
-        $form.Add($sc, $name, $name)
+        $null = $sc.Headers.TryAddWithoutValidation('Content-Disposition', "form-data; name=`"$name`"; filename=`"$name`"")
+        $sc.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('application/octet-stream')
+        $form.Add($sc)
     }
     $leaf = [Uri]::EscapeDataString((Split-Path $Package -Leaf))
     $mb = [math]::Round(((($files | ForEach-Object { (Get-Item $_).Length }) | Measure-Object -Sum).Sum) / 1MB, 1)
@@ -143,12 +150,17 @@ function Deploy-WinAppDeployCmd {
     $exe = Get-ChildItem $kits -Recurse -Filter WinAppDeployCmd.exe -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1
     if (-not $exe) { throw 'WinAppDeployCmd not found (Windows SDK).' }
     $pinArgs = @(); if ($env:HOLOLENS_PIN) { $pinArgs = @('-pin', $env:HOLOLENS_PIN) }
-    Write-Host 'Fallback: WinAppDeployCmd (no auto-launch; start the app from the HoloLens Start menu)' -ForegroundColor Yellow
-    & $exe.FullName uninstall -package $identity -ip $env:HOLOLENS_IP @pinArgs 2>$null | Out-Null
+    $ipOnly = ($env:HOLOLENS_IP -split ':')[0]
+    Write-Host 'Fallback: WinAppDeployCmd (no auto-launch; start the app from the HoloLens Start menu).' -ForegroundColor Yellow
+    Write-Host '(Microsoft documents WinAppDeployCmd mainly for IoT/Mobile; on HoloLens it may need pairing or not work.)' -ForegroundColor DarkGray
     $depArgs = @()
     $deps = Join-Path $pkgDir 'Dependencies\x86'
     if (Test-Path $deps) { $depArgs = @('-dependency') + (Get-ChildItem $deps -Filter *.appx | ForEach-Object FullName) }
-    & $exe.FullName install -file $Package -ip $env:HOLOLENS_IP @pinArgs @depArgs
+    # Try an update first (keeps the install), then a clean uninstall + install.
+    & $exe.FullName update -file $Package -ip $ipOnly @pinArgs @depArgs
+    if ($LASTEXITCODE -eq 0) { return }
+    & $exe.FullName uninstall -package $identity -ip $ipOnly @pinArgs 2>$null | Out-Null
+    & $exe.FullName install -file $Package -ip $ipOnly @pinArgs @depArgs
     if ($LASTEXITCODE -ne 0) { throw "WinAppDeployCmd failed (exit $LASTEXITCODE)." }
 }
 
@@ -160,7 +172,12 @@ if (-not $ForceFallback) {
         Write-Host ("Deployed in {0:mm\:ss}" -f $sw.Elapsed) -ForegroundColor Green
         exit 0
     } catch {
-        Write-Host "Device Portal deploy failed: $($_.Exception.Message)" -ForegroundColor Red
+        $msg = $_.Exception.Message
+        Write-Host "Device Portal deploy failed: $msg" -ForegroundColor Red
+        # The fallback can't fix these, and its own errors would only hide the real problem.
+        if ($msg -match '401|Unauthorized') { throw 'Wrong Device Portal user/password (HOLOLENS_USER / HOLOLENS_PASS in tools\.env.local).' }
+        if ($env:HOLOLENS_SCHEME -eq 'http') { throw 'USB deploy failed; WinAppDeployCmd fallback does not apply over USB. Check the cable and that Device Portal is on.' }
+        if ($msg -match 'HOLOLENS_|No -Package|Package not found') { throw }
     }
 }
 Deploy-WinAppDeployCmd

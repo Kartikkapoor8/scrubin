@@ -7,7 +7,7 @@ settings are already proven on the HoloLens.
 > **Windows laptop (current setup, no rig):** `ProjectSettings/` are committed now. After cloning, open in Unity
 > 2019.4.40f1 and run **ScrubIn ▸ Setup Project**. It applies every section B setting itself (also available
 > alone as **ScrubIn ▸ Apply HoloLens Settings**; verify with **ScrubIn ▸ Check HoloLens Settings**). For an
-> on-device build: close Unity, then `tools\ship.ps1` (pull + build + install + launch). `tools\doctor.ps1`
+> on-device build: close Unity, then `tools\run ship` (pull + build + install + launch). `tools\run doctor`
 > checks the machine.
 
 ## A. With the rig on this machine (recommended, about 5 minutes)

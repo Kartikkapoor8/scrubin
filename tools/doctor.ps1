@@ -47,8 +47,12 @@ foreach ($g in Get-CimInstance Win32_VideoController) {
 
 $plan = (powercfg /getactivescheme) 2>$null
 if ($plan -match '\((.+)\)') { $planName = $Matches[1] } else { $planName = "$plan" }
-if ($planName -match 'High performance|Ultimate') { Write-Check ok 'Power plan' $planName }
-else { Write-Check warn 'Power plan' "$planName (use High performance for demo)" }
+# Windows 11 "Power mode" (Settings > System > Power) is an overlay on top of the plan.
+$overlay = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes' -ErrorAction SilentlyContinue).ActiveOverlayAcPowerScheme
+$bestPerf = $overlay -eq 'ded574b5-45a0-4f42-8737-46345c09c238'
+if ($planName -match 'High performance|Ultimate' -or $bestPerf) {
+    Write-Check ok 'Power' ("$planName" + $(if ($bestPerf) { ' + power mode Best performance' } else { '' }))
+} else { Write-Check warn 'Power' "$planName (for the demo: Settings > System > Power > Power mode > Best performance)" }
 
 # ---------------- Tools ----------------
 Write-Host "`n[Tools]" -ForegroundColor Cyan
@@ -94,7 +98,10 @@ if ($editors.Count -eq 0) { Bad 'Unity editors' 'none installed' }
 foreach ($e in $editors) {
     $uwp = Test-Path (Join-Path $e.FullName 'Editor\Data\PlaybackEngines\MetroSupport')
     $tag = if ($uwp) { 'UWP module installed' } else { 'NO UWP module' }
-    $st = if ($uwp) { 'ok' } else { 'warn' }
+    # Only the project's editor version matters; others are listed for information.
+    $isProject = (-not $wantVer) -or ($e.Name -eq $wantVer)
+    $st = if (-not $isProject) { 'info' } elseif ($uwp) { 'ok' } else { 'warn' }
+    if (-not $isProject) { $tag += ' (not used by this project)' }
     Write-Check $st ('Unity ' + $e.Name) ("$tag -- $($e.FullName)")
 }
 if ($wantVer) {
@@ -125,10 +132,11 @@ if (Test-Path $vswhere) {
         $tags += $(if ($uwp) { 'UWP' } else { 'no UWP workload' })
         $tags += $(if ($cppUwp) { 'C++ UWP tools' } else { 'NO C++ UWP tools' })
         if ($game) { $tags += 'Unity tools' }
-        $note = switch ($major) { 16 { 'matches Unity 2019.4' } 17 { 'OK, may need toolset retarget' } default { 'too new/old for Unity 2019.4 IL2CPP' } }
+        $note = switch ($major) { 16 { 'matches Unity 2019.4' } 17 { 'OK, may need toolset retarget' } default { '(not used: too new/old for Unity 2019.4 IL2CPP)' } }
         $usable = $uwp -and $cppUwp -and ($major -in 16, 17)
         if ($usable) { $goodVs = $true }
-        $st = if ($usable) { 'ok' } else { 'warn' }
+        # Versions outside 2019/2022 are never used by build.ps1: informational, not a warning.
+        $st = if ($usable) { 'ok' } elseif ($major -in 16, 17) { 'warn' } else { 'info' }
         Write-Check $st $i.displayName ("{0} [{1}] {2}" -f $i.installationVersion, ($tags -join ', '), $note)
     }
     if (-not $goodVs) { Bad 'VS usable for HoloLens build' 'need VS 2019 (or 2022) with UWP + C++ UWP tools' }

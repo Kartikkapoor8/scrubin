@@ -32,9 +32,9 @@ function Await($op, [Type]$type) {
 function AwaitAction($op) { $task = $asTaskAction.Invoke($null, @($op)); $null = $task.Wait(-1) }
 
 function Get-TetheringManager {
-    $profile = [Windows.Networking.Connectivity.NetworkInformation]::GetInternetConnectionProfile()
-    if (-not $profile) { throw 'No internet connection to share. Connect the laptop to Wi-Fi (or Ethernet) first.' }
-    [Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager]::CreateFromConnectionProfile($profile)
+    $connProfile = [Windows.Networking.Connectivity.NetworkInformation]::GetInternetConnectionProfile()
+    if (-not $connProfile) { throw 'No internet connection to share. Connect the laptop to Wi-Fi (or Ethernet) first.' }
+    [Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager]::CreateFromConnectionProfile($connProfile)
 }
 
 function Get-HotspotClients {

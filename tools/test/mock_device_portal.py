@@ -198,6 +198,11 @@ class Handler(BaseHTTPRequestHandler):
         m = re.search(r"boundary=\"?([^\";]+)", ctype)
         if not m:
             return self.send(400, {"Reason": "not multipart: " + ctype})
+        # Be as strict as the real Device Portal might be: plain boundary, plain quoted filenames.
+        if 'boundary="' in ctype:
+            return self.send(400, {"Reason": "strict mock: quoted multipart boundary"})
+        if b"filename*=" in body:
+            return self.send(400, {"Reason": "strict mock: RFC 5987 filename*= parameter"})
         parts = body.count(b"--" + m.group(1).encode()) - 1
         fname = q.get("package", "")
         mv = re.match(r"(?P<name>[^_]+)_(?P<ver>\d+\.\d+\.\d+\.\d+)_", fname)

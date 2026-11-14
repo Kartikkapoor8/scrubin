@@ -11,10 +11,19 @@
 #   GET  /api/holographic/mrc/files             list
 #   GET  /api/holographic/mrc/file?filename=<hex64>&op=stream   download
 
+# Note: HoloLens limits a single MRC video to about 5 minutes; record the demo in shorter takes.
+
 param([Parameter(Mandatory)][ValidateSet('start', 'stop', 'status')][string]$Action)
 
 . "$PSScriptRoot\_common.ps1"
 Import-ScrubInEnv
+
+# CreationTime may come back as a number (FILETIME) or a date string depending on the OS build.
+function Get-SortKey($v) {
+    $d = 0.0
+    if ([double]::TryParse([string]$v, [ref]$d)) { return $d }
+    try { return ([datetime]$v).Ticks } catch { return 0 }
+}
 
 switch ($Action) {
     'status' {
@@ -29,12 +38,21 @@ switch ($Action) {
         else { Write-Host 'Start was accepted but the device does not report recording. Is another capture running?' -ForegroundColor Yellow }
     }
     'stop' {
+        # Remember what's already on the device, so we download the NEW file, not a previous one.
+        $before = @((Invoke-DP -Path '/api/holographic/mrc/files').MrcRecordings | ForEach-Object { $_.FileName })
         $null = Invoke-DP -Method POST -Path '/api/holographic/mrc/video/control/stop'
-        Write-Host 'Stopped. Waiting for the file to finalize...' -ForegroundColor Cyan
-        Start-Sleep -Seconds 3
-        $files = (Invoke-DP -Path '/api/holographic/mrc/files').MrcRecordings | Where-Object { $_.FileName -like '*.mp4' }
-        $newest = $files | Sort-Object { [double]$_.CreationTime } -Descending | Select-Object -First 1
-        if (-not $newest) { throw 'No .mp4 recordings found on the device.' }
+        Write-Host -NoNewline 'Stopped. Waiting for the device to save the file' -ForegroundColor Cyan
+        $newest = $null
+        $deadline = (Get-Date).AddSeconds(60)   # long recordings take a while to finalize
+        while (-not $newest -and (Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+            Write-Host -NoNewline '.'
+            $new = (Invoke-DP -Path '/api/holographic/mrc/files').MrcRecordings |
+                   Where-Object { $_.FileName -like '*.mp4' -and $before -notcontains $_.FileName }
+            $newest = $new | Sort-Object { Get-SortKey $_.CreationTime } -Descending | Select-Object -First 1
+        }
+        Write-Host ''
+        if (-not $newest) { throw 'No new .mp4 appeared on the device within 60 s. Check Device Portal > Mixed Reality Capture.' }
         $outDir = Join-Path $PSScriptRoot 'captures'
         New-Item -ItemType Directory -Force $outDir | Out-Null
         $out = Join-Path $outDir ('scrubin_{0:yyyyMMdd_HHmmss}.mp4' -f (Get-Date))

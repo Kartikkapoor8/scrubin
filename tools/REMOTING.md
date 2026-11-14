@@ -1,12 +1,12 @@
 # Holographic Remoting: the fast loop (Editor renders on the laptop, streams to HoloLens 1)
 
 > This laptop runs Windows 11 26H2. Windows Mixed Reality was removed in 24H2, so remoting may not work here.
-> If step 7 fails, use `tools\ship.ps1` (build + deploy) instead.
+> If step 7 fails, use `tools\run ship` (build + deploy) instead.
 
 1. **Headset:** open the **Holographic Remoting Player** app (from the Microsoft Store on the HoloLens). It shows an IP address. Note it.
 2. **Laptop hotspot:** Settings → Network & internet → **Mobile hotspot** → Properties **Edit** → Band **5 GHz** (if offered) → Save → turn **Mobile hotspot On**.
 3. **Headset Wi-Fi:** join the laptop's hotspot network (name/password shown on that Settings page).
-4. **Check:** `tools\connect-check.ps1 -Ip <headset IP>` should show avg < 10 ms and 0% loss.
+4. **Check:** `tools\run connect-check -Ip <headset IP>` should show avg < 10 ms and 0% loss.
 5. **Code:** `git -C C:\dev\scrubin pull --rebase`, then click into Unity and wait for the recompile spinner to stop.
 6. **Unity:** Window → XR → **Holographic Emulation** → Emulation Mode **Remote to Device** → Remote Machine = headset IP → **Connect**.
 7. Status should say **Connected**. Press **Play**. The scene appears in the headset.
@@ -54,7 +54,7 @@ Query parameters (Microsoft Device Portal API reference). If you specify any, th
   Pass them in the client's auth header or a local config, never in committed code.
 - Quick test from the Mac (ffmpeg installed; it prompts nothing, so put the credentials in an env var):
   `ffplay -fflags nobuffer -flags low_delay "https://$DP_USER:$DP_PASS@<HOLOLENS_IP>/api/holographic/stream/live_high.mp4?holo=true&pv=true&mic=false&loopback=false"`
-- Only one heavy consumer at a time: running the live stream and an MRC recording (`tools\record.ps1`) together
+- Only one heavy consumer at a time: running the live stream and an MRC recording (`tools\run record`) together
   costs headset frame rate. Plan on one.
 
 ## Measured
@@ -70,5 +70,5 @@ How delay is measured: open `tools/latency-clock.html` (a big millisecond clock,
 stream playing next to it. The wearer looks at the clock. Take a screenshot; delay = page clock minus the clock seen
 inside the stream. Repeat 3 times and average.
 
-Laptop helpers: `tools\hotspot.ps1 on -FiveGHz` (start hotspot), `tools\hotspot.ps1 find` (prints the HoloLens IP),
-`tools\stream-check.ps1` (confirms the stream serves MP4 and measures throughput).
+Laptop helpers: `tools\run hotspot on -FiveGHz` (start hotspot), `tools\run hotspot find` (prints the HoloLens IP),
+`tools\run stream-check` (confirms the stream serves MP4 and measures throughput).

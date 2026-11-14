@@ -123,6 +123,10 @@ $pkg = Get-ChildItem $OutDir -Recurse -Include *.appx, *.appxbundle -File |
        Where-Object { $_.FullName -match '\\AppPackages\\' -and $_.FullName -notmatch '\\Dependencies\\' } |
        Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $pkg) { throw "MSBuild succeeded but no .appx found under $OutDir\*\AppPackages" }
+# Each build leaves a ~22 MB versioned package folder; keep the newest 3.
+$pkgRoot = Split-Path (Split-Path $pkg.FullName -Parent) -Parent
+Get-ChildItem $pkgRoot -Directory | Where-Object { $_.Name -like '*_Test' } | Sort-Object LastWriteTime -Descending |
+    Select-Object -Skip 3 | ForEach-Object { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
 $sw.Stop()
 Write-Host ''
 Write-Host "PACKAGE: $($pkg.FullName)" -ForegroundColor Green
