@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env.local
+# downloaded by `npm run setup` (see scripts/setup.mjs)
+public/mediapipe/
+public/models/
+# local recordings and test clips
+media/
+dev/.cert/
+dev/media/
+shots/

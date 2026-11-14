@@ -11,15 +11,22 @@ Simulated training only. Not medical guidance.
 
 (The repo, folders and code namespace are still called `scrubin` / `ScrubIn`, the project's working name.)
 
-## Run it
+## Two apps
+
+- **VIPER Vision** (`vision/`): the audience view and the main build. It runs on a Mac, shows the wearer's
+  point of view (the HoloLens live stream, a webcam or a recorded video) and draws every overlay and the Gemini
+  attending on top. Start here: `vision/README.md`.
+- **The HoloLens app** (`Assets/`, Unity 2019.4): a light holographic forearm the wearer aligns to the real
+  arm. Everything below is about this app.
+
+## Run the HoloLens app
 
 - **In the Unity editor, no headset:** open the project in Unity 2019.4 and press Play. The Game view shows the
   whole experience from a fixed camera at standing eye height, and every operator key works. Right-drag orbits,
   scroll zooms, `C` resets the view.
 - **On a HoloLens (1st gen):** `tools\ship.ps1` builds and installs it; `tools/DEMO_CHECKLIST.md` is the
   demo-day checklist. First-time project setup: `docs/SETUP_WINDOWS.md`.
-- **Operator keys:** the table in `CLAUDE.md`. On the headset: air tap places the outline, starts the
-  procedure, places each suture and advances.
+- **Operator keys:** the table in `CLAUDE.md`. On the headset: the outline follows your gaze; air tap places it.
 
 Requirements: Unity 2019.4 LTS (built-in render pipeline, legacy XR / Windows Mixed Reality), TextMeshPro.
 
@@ -32,15 +39,14 @@ shared event contract, the visual kit, the performance budget for rendering on t
 
 ## Build order
 
-1. Bootstrap, PatientRoot placed in front of the wearer, operator alignment controls, arm contour outline,
-   HoloGlow shader.
-2. ProcedureController reading `procedure.json`, operator next / previous, air tap, Attending panel with
-   scripted lines.
-3. Plan + Stitch: the full suture animation, feedback text, procedural audio.
-4. X-ray: procedural anatomy, reveal wipe, flow pulses, labels, danger zone.
-5. Boot title and scan sweep, Assess HUD (patient card, ECG and vitals, wound dimensions), Complete score card.
-6. Autoplay demo mode; virtual patient mode.
-7. Stretch: hand-proximity "Aligned" feedback, voice keywords, grape mode.
+The HoloLens app is done for now (bootstrap, gaze-follow placement, air tap, the forearm hologram) and parked.
+VIPER Vision is built in this order:
+
+1. Relay for the HoloLens stream, with webcam, video-file and simulated-arm fallbacks.
+2. Wound detection (marker colour + line fit) and the suture targets pinned to it; hand tracking.
+3. The stitch flow: plan, per-stitch animation, feedback, score.
+4. The Gemini attending: spoken questions, answer cards, tools.
+5. Anatomy, danger zone and polish.
 
 ## Checking the code without Unity
 

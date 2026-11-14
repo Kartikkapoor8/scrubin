@@ -1,0 +1,28 @@
+{
+  "name": "viper-vision",
+  "private": true,
+  "version": "0.1.0",
+  "description": "VIPER Vision: the audience view. Shows the HoloLens wearer's point of view and draws the surgical overlays and the Gemini attending on top.",
+  "type": "module",
+  "scripts": {
+    "dev": "node server/index.mjs --dev",
+    "build": "tsc --noEmit && vite build",
+    "start": "node server/index.mjs",
+    "check": "tsc --noEmit",
+    "setup": "node scripts/setup.mjs",
+    "postinstall": "node scripts/setup.mjs",
+    "mock:hololens": "node dev/mock-hololens.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.0.0",
+    "@fontsource-variable/jetbrains-mono": "^5.0.0",
+    "@fontsource-variable/space-grotesk": "^5.0.0",
+    "@google/genai": "^3.3.0",
+    "@mediapipe/tasks-vision": "^1.2.3"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.65.1",
+    "typescript": "^5.6.0",
+    "vite": "^8.3.8"
+  }
+}
