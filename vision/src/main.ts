@@ -322,11 +322,14 @@ async function boot(): Promise<void> {
     },
     back: () => { touch(); if (arm.active) arm.back(); else procedure.back(); },
     reset: resetNow,
-    /** Talk button down / up. `held`: a key that only talks while held (Space): the release always ends the question. */
-    talk: (down: boolean, held = false) => {
+    /**
+     * Talk button down / up. `held`: a key that only talks while held (Space): the release always ends the
+     * question. Returns true when a release ended a press in which nothing was said.
+     */
+    talk: (down: boolean, held = false): boolean => {
       touch();
-      if (down) brain.talkDown(held ? 500 : 0);
-      else brain.talkUp(held);
+      if (down) { brain.talkDown(held ? 500 : 0); return false; }
+      return brain.talkUp(held);
     },
   };
   procedure.on(() => { lastActivity = performance.now(); });
@@ -439,6 +442,8 @@ async function boot(): Promise<void> {
       // Space is two keys in one: a tap is Next, held it is the talk button. Which one it was is only known
       // a moment later, so talking starts with the last half second the microphone heard.
       case ' ':
+        // With no Gemini session there is nothing to talk to: Space is simply Next, at once.
+        if (!brain.ready) { actions.next(); break; }
         window.clearTimeout(spaceTimer);
         spaceTalking = false;
         spaceTimer = window.setTimeout(() => {
@@ -543,7 +548,8 @@ async function boot(): Promise<void> {
         actions.next();
       } else if (spaceTalking) {
         spaceTalking = false;
-        actions.talk(false, true);
+        // A slow press with nothing said was meant as Next.
+        if (actions.talk(false, true)) actions.next();
       }
     }
   });

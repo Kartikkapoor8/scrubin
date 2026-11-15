@@ -161,11 +161,18 @@ export class AttendingBrain {
   /**
    * Talk button released. A hold ends the question here; a quick tap leaves it open until the speaker
    * stops. `force`: the release always ends it (a key that only talks when held).
+   * Returns true when the press turned out to be empty (over almost at once, nothing said).
    */
-  talkUp(force = false): void {
-    if (!this.gateOpen || this.latched) return;
-    if (force || performance.now() - this.talkStartedAt >= 350) this.closeGate();
-    else this.latched = true;
+  talkUp(force = false): boolean {
+    if (!this.gateOpen || this.latched) return false;
+    if (force || performance.now() - this.talkStartedAt >= 350) return this.closeGate();
+    this.latched = true;
+    return false;
+  }
+
+  /** A session is open: a talk button will be heard. */
+  get ready(): boolean {
+    return this.wanted && this.session !== null;
   }
 
   /** "Hey Gemini" was heard: open a question that ends when the speaker stops. False if that is not possible now. */
@@ -244,11 +251,14 @@ export class AttendingBrain {
     }, 100);
   }
 
-  /** `nothingSaid`: the turn is known to be empty; go back to Ready without waiting for an answer. */
-  private closeGate(nothingSaid = false): void {
+  /**
+   * `nothingSaid`: the turn is known to be empty; go back to Ready without waiting for an answer.
+   * Returns true when the turn was dropped as empty.
+   */
+  private closeGate(nothingSaid = false): boolean {
     window.clearInterval(this.talkTimer);
     window.clearTimeout(this.pauseTimer);
-    if (!this.gateOpen) return;
+    if (!this.gateOpen) return false;
     this.gateOpen = false;
     this.latched = false;
     this.wake.endCapture();
@@ -263,7 +273,7 @@ export class AttendingBrain {
       this.turnActive = false;
       this.card.hide();
       this.setState(this.wanted && this.session ? 'listening' : 'off');
-      return;
+      return true;
     }
     this.card.setState('thinking');
     this.setState('thinking');
@@ -277,6 +287,7 @@ export class AttendingBrain {
         this.setState(this.wanted && this.session ? 'listening' : 'off');
       }
     }, 9000);
+    return false;
   }
 
   /** Stop speaking and stop listening, now (reset). The session stays connected. */
@@ -418,6 +429,7 @@ export class AttendingBrain {
         if (body.error === 'not_configured') {
           this.wanted = false;
           this.mic.stop();
+          this.wake.stop(); // nothing to wake: do not leave the browser's recogniser listening
           this.setState('error', 'Gemini is not set up: add GEMINI_API_KEY to vision/.env.local (no restart needed), then press G');
           return;
         }

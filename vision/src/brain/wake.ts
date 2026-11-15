@@ -39,7 +39,7 @@ export interface WakeHandlers {
 
 // "Hey Gemini" as a recogniser may write it down. The greeting is required: the word alone comes up in
 // ordinary talk about the demo.
-const WAKE = /\b(?:hey|hay|hi|heyy|okay|ok|yo|hello|a)[\s,.!]+(?:gemini|geminy|gemmini|jiminy|jemini|gemina|jim and i|gem and i|gemma nye|germany)\b[\s,.!?]*/i;
+const WAKE = /\b(?:hey|hay|heyy|hi|hello|okay|ok|yo)[\s,.!]+(?:gemini|geminy|gemeni|gemmini|geminai|jiminy|jemini|gemina|jim and (?:i|eye)|gem and (?:i|eye)|gem in (?:i|eye)|gemma nye|germany)\b[\s,.!?]*/i;
 
 /** The text with a leading "Hey Gemini" (as a person or a transcript would write it) removed. */
 export function withoutWakePhrase(text: string): string {
