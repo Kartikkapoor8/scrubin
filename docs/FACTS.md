@@ -2,7 +2,7 @@
 
 Plain facts for the Devpost page. No claims beyond what is listed here. Each number says how and on what it
 was measured. "Mock" means the fake HoloLens Device Portal in `vision/dev/mock-hololens.mjs`, not the real
-headset. Last updated 2026-11-15 early morning; numbers marked TBD are filled in when they are measured.
+headset. Last updated 2026-11-15 about 04:00; numbers marked TBD are filled in when they are measured.
 
 ## What it is
 
@@ -22,11 +22,16 @@ Gemini voice attending answering spoken questions. Simulated training on a model
   - Wound tracking: colour mask for the marker, connected blobs, a line fit, One Euro filtering. Glowing
     hologram lines in the stream are rejected (ink never glows). Scale comes from the line's known 42 mm.
   - Hand tracking: MediaPipe Hand Landmarker in the page (index fingertip or pinch point; "Aligned" on target).
-  - The procedure: Ready, Scan, Assess (42 mm measurement), Anatomy (radial and ulnar arteries, veins, median
-    nerve, flexor tendons, a danger zone; a teaching diagram laid out around the wound, not a scan), Plan (five
+  - The procedure: Ready, Scan, Assess (42 mm measurement), Anatomy (radial and ulnar arteries, a superficial
+    vein, the median nerve and a danger zone, drawn in a window round the wound; a teaching diagram laid out
+    from the wound, not a scan; the flexor tendons appear only when Gemini is asked to show them), Plan (five
     simple interrupted sutures, 8 mm apart, 5 mm bites), Stitch (needle, thread and knot animation per suture,
-    feedback line), Complete (score card). One state machine, driven by keyboard, clicker, phone remote,
-    autoplay and Gemini's tool calls.
+    a feedback card), Debrief (sutures, average spacing, depth, time). One state machine, driven by keyboard,
+    clicker, phone remote, autoplay and Gemini's tool calls.
+  - What is measured and what is scripted: the wound's position, direction and length are tracked live from
+    the marker line. Each suture is triggered by the operator (key, clicker, phone or Gemini), not detected.
+    The spacing and depth shown after each suture and on the debrief are the plan's scripted values; the
+    suture count and the time are real.
   - Gemini attending: Gemini Live (`gemini-3.8-live`, Google's default Live model as of 2026-11-14) opened from
     the page with single-use ephemeral tokens issued by the local server (the API key never reaches the
     browser). Tool calls for answer cards, highlighting a structure, looking at the current picture, reading
@@ -52,14 +57,15 @@ Gemini voice attending answering spoken questions. Simulated training on a model
 
 ## Tech stack
 
-TypeScript 5.6, Vite 8.3, Node 26 (server: `node:http`, `ws` 8.23), MediaPipe Tasks Vision 1.2.3, `@google/genai`
+TypeScript 5.9, Vite 8.3, Node 26 (server: `node:http`, `ws` 8.23), MediaPipe Tasks Vision 1.2.3, `@google/genai`
 3.3 (Gemini Live, ephemeral tokens), Chrome's Web Speech API (wake phrase), Motion 14.14 (panel springs),
 three.js 0.187 (Arm mode only, loaded on demand), Space Grotesk, Inter and
 JetBrains Mono (Fontsource), ffmpeg (optional: repackaging and recording), Playwright 1.65 (testing only).
 HoloLens app: Unity 2019.4 LTS, TextMesh Pro, Windows Mixed Reality (legacy XR).
 
-Size at the time of writing: about 8,800 lines of TypeScript and 1,700 of CSS in the Mac app, 1,100 in its
-server, 1,200 in its test and tooling scripts; 22 C# files (about 4,200 lines) in the HoloLens app; 38 commits.
+Size at 04:00 on demo day: about 9,100 lines of TypeScript and 1,500 of CSS in the Mac app, 1,200 in its
+server, 1,900 in its test and tooling scripts; 22 C# files (about 4,200 lines) in the HoloLens app; about 56
+commits (`git rev-list --count HEAD` for the final number).
 
 ## Measured
 
@@ -69,13 +75,13 @@ server, 1,200 in its test and tooling scripts; 22 C# files (about 4,200 lines) i
 | Same, with longer fragments | about 0.25 s average (0.1 to 0.47 s) | Mock, about 300 ms fragments |
 | Lag probe accuracy | within 10 ms | Self-test with made-up delays of 850, 1730 and 120 ms |
 | Glass-to-glass delay, real headset | TBD | `Shift`+`Y` in the morning (per preset) |
-| Stream drop mid-run, back to live | 0.1 to 0.2 s | Mock dropping the connection; step and last frame kept |
-| Headset unreachable at launch, switch to webcam | 8.3 s, with a banner saying why | App left to choose its input, headset address unanswered |
+| Stream drop mid-run, back to live | 0.1 to 0.3 s | Mock dropping the connection; step and last frame kept (three drill runs) |
+| Headset unreachable at launch, switch to webcam | 8.2 to 8.4 s, with a banner saying why | App left to choose its input, headset address unanswered. With `?input=hololens` it keeps retrying instead |
 | Network lost silently: on screen as "Waiting for the headset" | 2.1 s | Mock frozen (no reset sent), banner and drained picture |
-| Network back: picture back | 2.2 s after the headset returns | Mock killed, then restarted |
+| Network back: picture back | 2.1 to 2.2 s after the headset returns | Mock killed, then restarted |
 | Gemini unreachable or key rejected | demo unaffected | Procedure and sutures carry on; the attending retries |
-| Page reload, picture back | 0.3 to 0.4 s, settings kept | Mid-run reload on the mock |
-| 30 resets in a row, then a full run | passes; page elements 274 before, 288 after | `node vision/dev/drills.mjs --only resets`; the full run took 53 s |
+| Page reload, picture back | about 0.3 s, settings kept | Mid-run reload on the mock |
+| 30 resets in a row, then a full run | passes; page elements flat across the resets, 14 to 19 more after the full run | `node vision/dev/drills.mjs --only resets`; the full run took 53 s |
 | 90 minutes of continuous runs | TBD | `node vision/dev/drills.mjs --soak 90` (memory, CPU, frame rate every minute) |
 | Frame rate through a full run, final UI | 60 fps in every step; 0 slow frames in 3,427 (worst 16.8 ms, no long animation frames) | `node vision/dev/profile.mjs`, 1920x1080 at 2x, mock headset input, Gemini panel shown, production build, headless Chrome on the Mac. Before the night's fixes: 25 slow frames (0.8%), worst 183 ms |
 | Wound analysis per video frame | about 1 ms (was about 4 ms) | Same run; only a window round the tracked wound is read back from the GPU |

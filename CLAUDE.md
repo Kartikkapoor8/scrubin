@@ -59,8 +59,8 @@ which is what the Mac tracks. The HoloLens app therefore draws nothing over the 
 VIPER is a HoloLens surgical suture trainer. Holograms are aligned onto a real forearm with a marker "laceration"
 on it, and the trainee is walked through a laceration repair: the field is scanned, the wound assessed, the anatomy
 under the skin revealed, five sutures planned and then placed one by one, and the result scored, with an attending
-surgeon card coaching every step. It is a hackathon build for UCSC DevFest 2026 (submissions close Sunday
-11:30 AM). The only goal is a beautiful, reliable live demo and demo video on a HoloLens (1st gen). Everything is
+surgeon card coaching every step. It is a hackathon build for UCSC DevFest 2026 (Devpost closes Sunday
+11:15 AM; table judging 11:30 AM to 1 PM). The only goal is a beautiful, reliable live demo and demo video on a HoloLens (1st gen). Everything is
 scripted for one procedure. Fake whatever needs faking. It must look incredible and never break on stage.
 
 ## Demo flow (what the audience sees, on the VIPER Vision screen)

@@ -79,7 +79,7 @@ the most line-like blob, fits a line to it and smooths it over time. Everything 
 millimetres from the centre of that line, so it stays pinned to the arm as the head moves. If a hand covers
 the marker for a moment the overlays hold their place; if it is gone for longer they fade out and come back.
 
-- `K`, then click the marker line: track that colour instead (kept between sessions). `M` steps through
+- `K`, then click the marker line: track that colour instead (kept between sessions). `Shift` + `M` steps through
   presets (green, magenta, blue, orange).
 - `X` / `Z`: flip which end is suture 1 / which side of the wound is the far side.
 - `[` / `]`: squash or stretch the overlays across the arm, to match the camera's angle.
