@@ -46,6 +46,8 @@ export function createRelay(getHeadset, recorder = null) {
       return Boolean(hl.ip && hl.user);
     },
     state: 'idle', // idle | connecting | streaming | error
+    /** Streams being relayed right now (the headset serves one at a time: preflight checks this first). */
+    active: 0,
     lastError: '',
     connects: 0,
     bytes: 0,
@@ -96,6 +98,7 @@ export function createRelay(getHeadset, recorder = null) {
     status.state = 'connecting';
     status.connects += 1;
     let finished = false;
+    let counted = false; // this request is one of status.active
     let stallTimer = null;
     let ticket = null; // this connection's place in the recorder
     let packer = null; // the ffmpeg process, when repackaging
@@ -133,7 +136,9 @@ export function createRelay(getHeadset, recorder = null) {
       }
       if (recorder && ticket) recorder.endStream(ticket);
       upstream.destroy();
-      if (status.state === 'streaming' || status.state === 'connecting') status.state = 'idle';
+      if (counted) { counted = false; status.active = Math.max(0, status.active - 1); }
+      if (status.active > 0) status.state = 'streaming';
+      else if (status.state === 'streaming' || status.state === 'connecting') status.state = 'idle';
       if (!res.writableEnded) res.end();
     };
 
@@ -183,7 +188,8 @@ export function createRelay(getHeadset, recorder = null) {
         : err.message === 'certificate_mismatch' ? 'The headset certificate does not match the pinned one.'
         : ['ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH', 'EHOSTDOWN', 'ETIMEDOUT', 'ECONNRESET'].includes(err.code)
           ? 'The headset is not answering on the network'
-          : `Could not reach the headset (${err.code || err.message})`;
+          : 'The headset could not be reached';
+      console.warn(`[relay] headset not reached: ${err.code || err.message}`);
       finished = true;
       clearTimeout(stallTimer);
       fail(res, code, 'unreachable', detail);
@@ -194,7 +200,8 @@ export function createRelay(getHeadset, recorder = null) {
         const detail =
           up.statusCode === 401 || up.statusCode === 403
             ? 'The headset rejected the user name or password.'
-            : `The headset answered ${up.statusCode}. Is Device Portal on and is another capture already running?`;
+            : 'The headset refused the stream. Is Device Portal on, and is something else already showing it?';
+        if (up.statusCode !== 401 && up.statusCode !== 403) console.warn(`[relay] the headset answered HTTP ${up.statusCode}`);
         up.resume();
         finished = true;
         fail(res, 502, up.statusCode === 401 || up.statusCode === 403 ? 'auth' : 'upstream_status', detail);
@@ -202,6 +209,8 @@ export function createRelay(getHeadset, recorder = null) {
       }
 
       status.state = 'streaming';
+      status.active += 1;
+      counted = true;
       status.lastError = '';
       status.since = Date.now();
       const begin = () => {

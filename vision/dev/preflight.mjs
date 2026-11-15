@@ -59,7 +59,12 @@ if (config.hololens?.configured) {
   }[probe.error] || probe.error || 'unknown';
   line(probe.ok ? 'ok' : 'FIX', 'Headset reachable and login accepted', probe.ok ? '' : why);
 
-  if (probe.ok) {
+  const active = probe.status?.active || 0;
+  if (probe.ok && active > 0) {
+    // The headset serves one live stream at a time: opening three more here would knock the page off it.
+    line('note', 'Stream test skipped', 'the app is showing the headset stream right now (the headset serves one stream at a time). To test the stream, run preflight before opening the page, or press 4 in the app first and 1 after.');
+    streamOk = true;
+  } else if (probe.ok) {
     // Read a few seconds of each stream preset and say what is in it. The fragment length is the part of the
     // delay the headset itself adds before anything can be shown; the app's lag probe (Shift+Y, headset
     // looking at the screen) measures the whole chain.

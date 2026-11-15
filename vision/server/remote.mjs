@@ -23,10 +23,9 @@ export function isLocalRequest(req) {
   return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
 }
 
-export function createRemote(server, enabled) {
-  const pin = /^\d{4,8}$/.test(process.env.VISION_REMOTE_PIN || '')
-    ? process.env.VISION_REMOTE_PIN
-    : String(crypto.randomInt(0, 10000)).padStart(4, '0');
+/** `fixedPin`: VISION_REMOTE_PIN from the shell or vision/.env.local; otherwise a random PIN at each start. */
+export function createRemote(server, enabled, fixedPin = '') {
+  const pin = /^\d{4,8}$/.test(fixedPin) ? fixedPin : String(crypto.randomInt(0, 10000)).padStart(4, '0');
   const phones = new Set();
   const apps = new Set();
   let lastState = null;

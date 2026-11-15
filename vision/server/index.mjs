@@ -13,9 +13,10 @@ import { createRelay } from './relay.mjs';
 import { createRemote } from './remote.mjs';
 
 const DEV = process.argv.includes('--dev');
-// The phone remote is the one thing other devices may reach. VISION_REMOTE=0 keeps the server to this Mac only.
-const REMOTE_ON = process.env.VISION_REMOTE !== '0';
 const config = currentConfig();
+// The phone remote is the one thing other devices may reach. VISION_REMOTE=0 keeps the server to this Mac only.
+// Read at start-up (shell or vision/.env.local); changing it needs a restart.
+const REMOTE_ON = config.remote.enabled;
 const recorder = createRecorder(path.join(VISION_ROOT, 'media'));
 const relay = createRelay(() => currentConfig().hololens, recorder);
 
@@ -144,13 +145,31 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-const remote = createRemote(server, REMOTE_ON);
+const remote = createRemote(server, REMOTE_ON, config.remote.pin);
 
 if (DEV) {
   // Vite runs inside this server, hot-reload socket included, so the whole app is one port.
   const { createServer } = await import('vite');
   vite = await createServer({ root: VISION_ROOT, server: { middlewareMode: true, hmr: { server } }, appType: 'spa' });
 }
+
+// Usually an earlier VIPER Vision (often a forgotten `npm run dev`) is still running: say so, plainly, and stop.
+const portTaken = () => {
+  console.error(`\n  VIPER Vision could not start: port ${config.port} is already in use, most likely by another VIPER Vision.`);
+  console.error(`  Stop that one (Ctrl+C in its terminal, or: kill $(lsof -ti tcp:${config.port})) and start again,`);
+  console.error(`  or run this one on another port: VISION_PORT=4748 npm start\n`);
+  process.exit(1);
+};
+// Ask first: on macOS a 127.0.0.1 listener can sit beside an all-interfaces one on the same port and quietly
+// take localhost away from it, so the listen error below does not catch every case.
+try {
+  await fetch(`http://127.0.0.1:${config.port}/`, { signal: AbortSignal.timeout(700) });
+  portTaken();
+} catch { /* nothing answering there: good */ }
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') portTaken();
+  throw err;
+});
 
 server.listen(config.port, REMOTE_ON ? '0.0.0.0' : '127.0.0.1', () => {
   console.log(`\n  VIPER Vision  ${DEV ? '(dev)' : ''}  http://localhost:${config.port}\n`);

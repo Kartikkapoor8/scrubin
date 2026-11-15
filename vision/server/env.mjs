@@ -111,6 +111,10 @@ export function loadEnv() {
       apiKey: clean(env.GEMINI_API_KEY) || clean(env.GOOGLE_API_KEY),
       liveModel: clean(env.GEMINI_LIVE_MODEL),
     },
+    remote: {
+      enabled: clean(env.VISION_REMOTE) !== '0',
+      pin: /^\d{4,8}$/.test(clean(env.VISION_REMOTE_PIN)) ? clean(env.VISION_REMOTE_PIN) : '',
+    },
   };
 }
 
