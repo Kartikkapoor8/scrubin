@@ -798,3 +798,22 @@
 .gem__a,
 .gem__hint { text-wrap: pretty; }
 .rail__title { text-wrap: balance; }
+
+/* The Gemini button: hold and ask; also reconnects a dropped session. */
+.ask-button {
+  position: absolute;
+  right: calc(var(--u) * 3.6);
+  bottom: calc(var(--u) * 7);
+  pointer-events: auto;
+  padding: calc(var(--u) * 1) calc(var(--u) * 2);
+  font: 700 var(--t-sm) var(--font-body);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(var(--ink-rgb), 0.92);
+  border: 1px solid rgba(var(--cyan-rgb), 0.6);
+  border-radius: calc(var(--u) * 0.7);
+  cursor: pointer;
+}
+.ask-button:active { background: rgba(var(--cyan-rgb), 0.3); }
+.stage--clean .ask-button, .hud--attract .ask-button { display: none; }

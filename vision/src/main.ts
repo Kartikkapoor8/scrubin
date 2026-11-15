@@ -284,6 +284,16 @@ async function boot(): Promise<void> {
     panelForAnnotate = false;
   };
   procedure.on((event) => { if (event.type === 'step' && event.step.id !== 'standby') annotate.clear(false); });
+  // A Gemini button on screen: hold it and ask. If the session has dropped, pressing it reconnects.
+  const askButton = add(hud.root, el('button', 'ask-button', 'Hold to ask Gemini'));
+  askButton.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    if (!brain.ready) { brain.stop(); void brain.start(); hud.notice('Reconnecting Gemini', 2000); return; }
+    actions.talk(true, true);
+  });
+  const release = () => { if (brain.talking) actions.talk(false, true); };
+  askButton.addEventListener('pointerup', release);
+  askButton.addEventListener('pointerleave', release);
   if (params.get('voice') === '0') brain.voice = false;
   if (params.get('wake') === '0') brain.wakeEnabled = false;
   if (params.get('turns') === 'manual') brain.markTurns = true;
@@ -822,7 +832,8 @@ async function boot(): Promise<void> {
     const framing: Partial<Record<StepId, [number, number]>> = { assess: [0.15, 1.6], anatomy: [0.2, 2], plan: [0.24, 2.2], stitch: [0.24, 2.2], complete: [0.2, 2] };
     // Auto-annotate moves in on the line too, so its labels have room.
     const frameFor = annotate.showing ? ([0.25, 2.4] as [number, number]) : framing[step];
-    if (settings.autoZoom && !scene.hidden && pose.locked && frameFor) {
+    // The picture stays zoomed out (Kartik, demo day); ?zoom=1 brings the move-in back.
+    if (params.get('zoom') === '1' && settings.autoZoom && !scene.hidden && pose.locked && frameFor) {
       const desired = clamp((stage.clientWidth * frameFor[0]) / Math.max(1, pose.length * view.baseScale), 1, frameFor[1]);
       if (Math.abs(desired - zoomTarget) > 0.12 || zoomTarget === 1) zoomTarget = desired;
       view.focusOn(zoomTarget, pose.cx, pose.cy);
