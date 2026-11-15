@@ -1,6 +1,7 @@
 // Records B-roll for the video: 1080p MP4s of the app in headless Chrome, with no cursor and no operator UI.
 //
 //   node dev/broll.mjs [--base "http://localhost:4747/?input=sim"] [--runs 2] [--idle 30] [--out media/broll]
+//                      [--query "clean=1&panel=1"] [--prefix run]      (--idle 0: no idle loop)
 //
 // Makes `run-1.mp4`, `run-2.mp4`, ... (each a full autoplay run, Ready to the score card and a few seconds of
 // it) and `idle-loop.mp4` (the idle screen; loop it with a short crossfade: the picture behind it never repeats exactly). Frames come from
@@ -21,6 +22,7 @@ const runs = Number(arg('runs', '2'));
 const idleSeconds = Number(arg('idle', '30'));
 const outDir = path.resolve(here, '..', arg('out', 'media/broll'));
 const extra = arg('query', '');
+const prefix = arg('prefix', 'run');
 fs.mkdirSync(outDir, { recursive: true });
 const FPS = 30;
 const sep = base.includes('?') ? '&' : '?';
@@ -79,7 +81,7 @@ const step = (page) => page.evaluate(() => window.__viper.parts.procedure().step
 for (let i = 1; i <= runs; i++) {
   const page = await open('&attract=0&done=0&idle=0');
   await page.waitForTimeout(3500);
-  await record(page, path.join(outDir, `run-${i}.mp4`), async () => {
+  await record(page, path.join(outDir, runs > 1 ? `${prefix}-${i}.mp4` : `${prefix}.mp4`), async () => {
     await page.waitForTimeout(1500);
     await page.keyboard.press('a');
     const started = Date.now();
@@ -89,7 +91,7 @@ for (let i = 1; i <= runs; i++) {
   await page.context().close();
 }
 
-{
+if (idleSeconds > 0) {
   const page = await open('&attract=1');
   await page.waitForTimeout(4500); // the idle screen has come up and settled
   await record(page, path.join(outDir, 'idle-loop.mp4'), () => page.waitForTimeout(idleSeconds * 1000));
