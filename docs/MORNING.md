@@ -66,7 +66,8 @@ Everything below runs on the Mac unless it says laptop or headset. Times are cum
 
 14. `Shift`+`C` records exactly 60 s of the headset stream to `vision/media/`. If the headset dies during
     judging, key `3` plays the newest clip and the whole demo runs on it. Key `4` (simulated arm) needs
-    nothing at all. B-roll for the video is in `vision/media/broll/`.
+    nothing at all. B-roll for the video is in `vision/media/broll/` (its `README.txt` says what each file is).
+    `?clean=1` hides the chips and operator notices (for screen recordings); at the table leave it off.
 
 ## 0:10 Ready
 
@@ -89,8 +90,9 @@ Everything below runs on the Mac unless it says laptop or headset. Times are cum
 | **Searching for wound** | `K`, then click the green line. More even light. `D` shows what the tracker sees (`D` again hides it). |
 | Overlays on the wrong side of the wound / suture 1 at the wrong end | `Z` / `X` (remembered). |
 | Suture targets too wide or narrow across the arm | `[` / `]` (remembered). |
-| The Gemini panel is missing, or Gemini is not answering | The demo runs without it. Internet on the Mac (step 4)? `GEMINI_API_KEY` set? `Shift`+`G` turns Gemini off and on; Chrome must have microphone permission (lock icon in the address bar). |
-| "Hey Gemini" is not picked up | Say it clearly, then the question; or hold `Space` or the clicker's talk button instead. It needs internet. `?wake=0` in the address turns the wake phrase off. |
+| The Gemini panel (top right) is missing | No Gemini session: the chip says why (**Gemini connecting**, or **Gemini offline** after three failed tries; it keeps retrying). The demo runs without it. Internet on the Mac (step 4)? `GEMINI_API_KEY` set? `Shift`+`G` turns Gemini off and on. |
+| Gemini does not answer | Chrome must have microphone permission (lock icon in the address bar). Chip states: ready, listening, thinking, speaking. |
+| "Hey Gemini" is not picked up | The panel's hint says **Say “Hey Gemini”** when the wake phrase is working and **Hold Space and ask** when it is not (it needs Chrome and the internet). Either way: hold `Space` or the clicker's talk button while asking. `?wake=0` in the address turns the wake phrase off. |
 | Gemini does not hear the question | Hold the clicker's talk button (or `G` or `Space`) while speaking. |
 | Anything odd on screen | `R` (instant reset). Still odd: reload (`Cmd`+`R`). |
 | The Mac app is dead | `npm start` again in `vision/`. Raw view for the judges meanwhile: laptop `tools\run spectate`. |

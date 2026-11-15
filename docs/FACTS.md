@@ -29,8 +29,15 @@ Gemini voice attending answering spoken questions. Simulated training on a model
     autoplay and Gemini's tool calls.
   - Gemini attending: Gemini Live (`gemini-3.8-live`, Google's default Live model as of 2026-11-14) opened from
     the page with single-use ephemeral tokens issued by the local server (the API key never reaches the
-    browser). Push-to-talk; tool calls for answer cards, highlighting a structure, looking at the current
-    picture, reading and moving the procedure. Spoken answers are captioned.
+    browser). Tool calls for answer cards, highlighting a structure, looking at the current picture, reading
+    and moving the procedure. A panel top right labelled "Gemini" shows the question as it is spoken, the
+    answer typing out, a waveform for listening, thinking and speaking, and a line of procedure context
+    ("Step 5 of 6 · Suture 2 of 5"). Answers are spoken aloud.
+  - Hands-free: Chrome's Web Speech API listens for "Hey Gemini", which opens the Live turn with the last
+    1.8 s of audio so the question is whole. Push-to-talk on the clicker, `Space` (hold) or `G` as a fallback.
+    The microphone stays closed while Gemini thinks or speaks.
+  - The panels move on one spring (Motion) and share one type scale; green means good, amber caution, red
+    danger. The anatomy is drawn only in a window round the wound (the HoloLens app already shows the body).
   - Table mode: idle screen, instant reset, presenter keys, a phone remote (`/remote`, PIN, over WebSocket).
   - Latency tools: an adaptive live-edge player (Media Source Extensions), three stream presets, a
     glass-to-glass lag probe (a flashing square found in the headset's picture by correlation), a preset sweep.
@@ -46,7 +53,8 @@ Gemini voice attending answering spoken questions. Simulated training on a model
 ## Tech stack
 
 TypeScript 5.6, Vite 8.3, Node 26 (server: `node:http`, `ws` 8.23), MediaPipe Tasks Vision 1.2.3, `@google/genai`
-3.3 (Gemini Live, ephemeral tokens), three.js 0.187 (Arm mode only, loaded on demand), Space Grotesk, Inter and
+3.3 (Gemini Live, ephemeral tokens), Chrome's Web Speech API (wake phrase), Motion 14.14 (panel springs),
+three.js 0.187 (Arm mode only, loaded on demand), Space Grotesk, Inter and
 JetBrains Mono (Fontsource), ffmpeg (optional: repackaging and recording), Playwright 1.65 (testing only).
 HoloLens app: Unity 2019.4 LTS, TextMesh Pro, Windows Mixed Reality (legacy XR).
 
@@ -69,7 +77,7 @@ server, 1,200 in its test and tooling scripts; 22 C# files (about 4,200 lines) i
 | Page reload, picture back | 0.3 to 0.4 s, settings kept | Mid-run reload on the mock |
 | 30 resets in a row, then a full run | passes; page elements 274 before, 288 after | `node vision/dev/drills.mjs --only resets`; the full run took 53 s |
 | 90 minutes of continuous runs | TBD | `node vision/dev/drills.mjs --soak 90` (memory, CPU, frame rate every minute) |
-| Frame rate through a full run | 60 fps in every step; 1 slow frame in 3,425 (the key press that starts autoplay) | `node vision/dev/profile.mjs`, 1920x1080 at 2x, mock headset input, production build, headless Chrome on the Mac; before the wound tracker read only a window: 25 slow frames (0.8%) |
+| Frame rate through a full run, final UI | 60 fps in every step; 0 slow frames in 3,427 (worst 16.8 ms, no long animation frames) | `node vision/dev/profile.mjs`, 1920x1080 at 2x, mock headset input, Gemini panel shown, production build, headless Chrome on the Mac. Before the night's fixes: 25 slow frames (0.8%), worst 183 ms |
 | Wound analysis per video frame | about 1 ms (was about 4 ms) | Same run; only a window round the tracked wound is read back from the GPU |
 
 Not measured on real hardware yet: the HoloLens stream delay, wound tracking and hands on real headset
@@ -84,6 +92,7 @@ footage with the holographic body in view, a real Gemini session (no key was on 
 | `@google/genai` | Apache 2.0 |
 | three.js | MIT |
 | `ws` | MIT |
+| Motion (`motion`) | MIT |
 | Vite, TypeScript, Playwright (development only) | MIT / Apache 2.0 |
 | TextMesh Pro essential resources (HoloLens app) | Unity Companion License |
 | Liberation Sans (inside TextMesh Pro) | SIL Open Font License 1.1 |
