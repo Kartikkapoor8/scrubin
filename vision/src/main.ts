@@ -37,7 +37,6 @@ import { Hud } from './ui/hud';
 import { ScoreCard } from './ui/score';
 import { StepPanel } from './ui/steps';
 import { TitleCard } from './ui/title';
-import { VitalsPanel } from './ui/vitals';
 
 interface ServerConfig {
   remote?: { enabled: boolean; pin: string; addresses: string[] };
@@ -103,6 +102,9 @@ async function boot(): Promise<void> {
   const overlayCanvas = add(stage, el('canvas', 'stage__overlay'));
   const hud = new Hud(stage);
   hud.setKeys(KEYS);
+  // Clean record mode (?clean=1): what the audience is meant to see and nothing else. No status chips,
+  // no operator notices, no mouse pointer.
+  if (params.get('clean') === '1') stage.classList.add('stage--clean');
 
   const view = new Viewport();
   if (params.get('fit') === 'contain') view.fit = 'contain';
@@ -150,8 +152,7 @@ async function boot(): Promise<void> {
   // Suture feedback and the captions share the bottom of the screen, stacked.
   const bottom = add(hud.root, el('div', 'bottom-stack'));
   new FeedbackToast(bottom, procedure);
-  new ScoreCard(hud.root, procedure);
-  const vitals = new VitalsPanel(hud.root, procedure);
+  new ScoreCard(bottom, procedure);
   const attending = new AttendingCard(hud.root);
   const attract = new AttractScreen(hud.root);
   // A running clock for measuring how far the headset's picture trails real life (key Y).
@@ -240,23 +241,25 @@ async function boot(): Promise<void> {
     },
   };
 
-  const brainChip = hud.addChip('Attending off');
+  const brainChip = hud.addChip('Gemini off');
   const brain = new AttendingBrain(brainHost, attending, (state, detail) => {
     // The panel is on screen while the session is up, and simply absent when it is not.
     attending.setOnline(state !== 'off' && state !== 'error' && state !== 'connecting');
     if (state === 'error') {
-      brainChip.set('Attending offline', 'bad');
+      brainChip.set('Gemini offline', 'off');
       if (detail) hud.notice(detail, 6000);
-    } else if (state === 'off') brainChip.set('Attending off', 'off');
-    else if (state === 'connecting') brainChip.set('Attending connecting', 'busy');
-    else if (state === 'listening') brainChip.set('Attending listening', 'ok');
-    else if (state === 'hearing') brainChip.set('Attending hears you', 'ok');
-    else if (state === 'thinking') brainChip.set('Attending thinking', 'ok');
-    else brainChip.set('Attending answering', 'ok');
+    } else if (state === 'off') brainChip.set('Gemini off', 'off');
+    else if (state === 'connecting') brainChip.set(brain.offline ? 'Gemini offline' : 'Gemini connecting', brain.offline ? 'off' : 'busy');
+    else if (state === 'listening') brainChip.set('Gemini ready', 'ok');
+    else if (state === 'hearing') brainChip.set('Gemini listening', 'ok');
+    else if (state === 'thinking') brainChip.set('Gemini thinking', 'ok');
+    else brainChip.set('Gemini speaking', 'ok');
   });
   if (params.get('voice') === '0') brain.voice = false;
   if (params.get('wake') === '0') brain.wakeEnabled = false;
   if (params.get('talk') === 'open') brain.talkMode = 'open';
+  // For recordings and screenshots with no Gemini session: show the panel as it looks when one is up.
+  if (params.get('panel') === '1') attending.setOnline(true);
   procedure.on((event) => {
     if (event.type === 'step' || event.type === 'stitch-done' || event.type === 'reset') brain.noteState();
   });
@@ -335,9 +338,9 @@ async function boot(): Promise<void> {
     title: procedure.step.title,
     index: procedure.index === 0 ? 'Ready' : `Step ${procedure.index} of ${procedure.steps.length - 1}`,
     sutures: ['plan', 'stitch', 'complete'].includes(procedure.step.id) ? `Sutures ${procedure.stitchesDone}/${procedure.count}` : '',
-    attending: brain.state === 'off' ? '' : brain.state === 'error' ? 'Attending offline'
+    attending: brain.state === 'off' ? '' : brain.state === 'error' ? 'Gemini offline'
       : brain.state === 'hearing' ? 'Listening' : brain.state === 'thinking' ? 'Thinking'
-      : brain.state === 'answering' ? 'Answering' : brain.state === 'connecting' ? 'Attending connecting' : 'Attending ready',
+      : brain.state === 'answering' ? 'Speaking' : brain.state === 'connecting' ? 'Gemini connecting' : 'Gemini ready',
   }), (count) => {
     remoteChip.show(count > 0);
     remoteChip.set(count === 1 ? 'Remote connected' : `${count} remotes`, 'ok');
@@ -723,7 +726,7 @@ async function boot(): Promise<void> {
     if (id === 'stitch') return `${where} \u00B7 Suture ${Math.min(procedure.count, procedure.stitchesDone + 1)} of ${procedure.count}`;
     if (id === 'complete') return `${where} \u00B7 ${procedure.stitchesDone} of ${procedure.count} sutures`;
     if (id === 'plan') return `${where} \u00B7 ${procedure.count} sutures planned`;
-    return `${where} \u00B7 ${procedure.step.title}`;
+    return `${where} \u00B7 ${procedure.step.label}`;
   };
 
   const frame = (now: number) => {
@@ -755,7 +758,7 @@ async function boot(): Promise<void> {
     if (!procedure.autoplay && procedure.step.id !== 'standby' && resetAfter > 0 && quiet > resetAfter) {
       resetNow();
     }
-    attending.setLevel(brain.talking ? brain.mic.level : 0);
+    attending.setLevel(brain.mic.level);
     attending.setVoiceLevel(brain.voiceLevel);
     attending.setSpeaking(brain.speaking);
     attending.setContext(contextLine());
@@ -766,7 +769,7 @@ async function boot(): Promise<void> {
     const step = procedure.step.id;
     view.setSize(stage.clientWidth, stage.clientHeight, video.videoWidth, video.videoHeight);
     // How much of the screen's width the wound should fill in each step, and the most to zoom for it.
-    const framing: Partial<Record<StepId, [number, number]>> = { assess: [0.15, 1.6], plan: [0.24, 2.2], stitch: [0.24, 2.2] };
+    const framing: Partial<Record<StepId, [number, number]>> = { assess: [0.15, 1.6], anatomy: [0.2, 2], plan: [0.24, 2.2], stitch: [0.24, 2.2], complete: [0.2, 2] };
     const frameFor = framing[step];
     if (settings.autoZoom && !scene.hidden && pose.locked && frameFor) {
       const desired = clamp((stage.clientWidth * frameFor[0]) / Math.max(1, pose.length * view.baseScale), 1, frameFor[1]);
@@ -797,7 +800,7 @@ async function boot(): Promise<void> {
       lastKeepOut = now;
       const origin = stage.getBoundingClientRect();
       scene.keepOut = [];
-      for (const panel of hud.root.querySelectorAll<HTMLElement>('.steps, .vitals, .score.panel--on, .gem')) {
+      for (const panel of hud.root.querySelectorAll<HTMLElement>('.rail__item[data-state="now"] .keep, .rail__ready--on .keep, .debrief--on, .gem')) {
         if (scene.attract || Number(getComputedStyle(panel).opacity) < 0.5) continue;
         const box = panel.getBoundingClientRect();
         if (box.width < 4 || box.height < 4) continue;
@@ -817,7 +820,6 @@ async function boot(): Promise<void> {
     renderer.resize(stage.clientWidth, stage.clientHeight);
     if (arm.active) arm.draw(t, dt);
     else renderer.draw(t, dt, view);
-    vitals.update(t, dt);
     stage.classList.toggle('stage--idle', now - lastPointer > 2500 && !picking);
 
     if (pose.locked && !wasLocked && step === 'standby') sounds.lock();

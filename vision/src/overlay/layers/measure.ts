@@ -2,7 +2,7 @@ import type { Scene } from '../../app/scene';
 import { Appear } from '../../app/scene';
 import { clamp, progress } from '../../core/dom';
 import { PROCEDURE } from '../../procedure/data';
-import { C, dot, glow, polyline, text } from '../draw';
+import { C, dot, glow, polyline, text, textHeight } from '../draw';
 import type { Frame, Layer } from '../renderer';
 import { WoundSpace } from '../space';
 
@@ -58,7 +58,7 @@ export class MeasureLayer implements Layer {
     const value = this.presence.isOn ? counted : marker.lengthMm;
     const [nx, ny] = w.point(0, -(offset + 5.2));
     text(ctx, `${value} mm`, nx, ny, {
-      size: clamp(3.4 * px, 14, 22), color: C.white, alpha: presence * p(0.45, 0.4), weight: 700, tracking: 0.04,
+      size: clamp(3.6 * px, 17, 25), color: C.white, alpha: presence * p(0.45, 0.4), weight: 700, tracking: 0.02,
     });
 
     // What it is, on a leader from the wound to the far side.
@@ -74,10 +74,10 @@ export class MeasureLayer implements Layer {
       dot(ctx, ax, ay, 2.2, C.cyan, presence * tag);
       const labelAlpha = presence * p(1.5, 0.5);
       const size = clamp(2.6 * px, 14, 17);
-      text(ctx, PROCEDURE.wound.label.toUpperCase(), cx + 8, cy - size * 0.1, {
-        size, color: C.cyan, alpha: labelAlpha, align: 'left', weight: 700, tracking: 0.2,
+      text(ctx, PROCEDURE.wound.label.toUpperCase(), cx + 8, cy - textHeight(size) * 0.3, {
+        size, color: C.cyan, alpha: labelAlpha, align: 'left', font: 'body', weight: 700, tracking: 0.16,
       });
-      text(ctx, `linear · ${PROCEDURE.patient.site}`, cx + 8, cy + size * 1.25, {
+      text(ctx, `linear · ${PROCEDURE.patient.site}`, cx + 8, cy + textHeight(size) * 0.72, {
         size: size * 0.86, color: C.white, alpha: labelAlpha * 0.85, align: 'left', font: 'body', weight: 500, tracking: 0.01,
       });
     }

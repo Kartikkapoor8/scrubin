@@ -1,5 +1,7 @@
 import { add, el } from '../core/dom';
 import type { InputSnapshot } from '../input/manager';
+import { PROCEDURE } from '../procedure/data';
+import { snapMotion } from './motion';
 
 const KEYS: Array<[string, string]> = [
   ['1', 'Input: HoloLens stream'],
@@ -12,7 +14,7 @@ const KEYS: Array<[string, string]> = [
 ];
 
 /**
- * The fixed chrome around the picture: brand, the "Trainee view · concept" label, status chips, the
+ * The fixed chrome around the picture: brand, the "Training simulator · concept" label, status chips, the
  * connection banner and the operator's key list. Panels for the procedure are added by their own modules.
  */
 export class Hud {
@@ -43,7 +45,7 @@ export class Hud {
     add(words, el('div', 'brand__name', 'VIPER'));
     add(words, el('div', 'brand__sub', 'Visual Instruction for Procedures & Emergency Repair'));
 
-    add(this.root, el('div', 'corner-label', 'Trainee view · concept'));
+    add(this.root, el('div', 'corner-label', PROCEDURE.cornerLabel));
 
     this.chips = add(this.root, el('div', 'chips'));
     this.sourceChip = add(this.chips, el('div', 'chip'));
@@ -92,6 +94,7 @@ export class Hud {
 
   /** Drop every fade for a moment, so a reset is instant rather than a slow dissolve. */
   snap(): void {
+    snapMotion();
     this.root.classList.add('hud--snap');
     window.setTimeout(() => this.root.classList.remove('hud--snap'), 120);
   }

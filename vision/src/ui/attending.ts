@@ -104,6 +104,8 @@ export class AttendingCard {
       sweep(this.root);
       requestAnimationFrame(() => this.fit(true));
     } else {
+      // Gone, and nothing stale left on it for when it comes back.
+      this.hide();
       leave(this.root, { y: -10 });
     }
   }
@@ -200,8 +202,14 @@ export class AttendingCard {
 
   /** A status and the question so far (while Gemini is listening or thinking). */
   wake(state: AttendingState, question = ''): void {
-    // A new question (or the talk button going down): the previous answer no longer belongs here.
-    if (state === 'listening' && !this.open && this.count >= this.full.length && this.full !== '') {
+    // A new question (or the talk button going down): the previous answer no longer belongs here, even
+    // if it was still being typed or spoken.
+    if (state === 'listening' && this.full !== '') {
+      window.clearInterval(this.timer);
+      this.timer = 0;
+      window.clearTimeout(this.hideTimer);
+      this.open = false;
+      this.typed = false;
       this.clearAnswer();
       if (!question) this.setQuestion('');
     }
@@ -246,10 +254,11 @@ export class AttendingCard {
     ctx.clearRect(0, 0, width, height);
 
     const state = this.state;
-    const target = state === 'listening' ? 0.16 + this.micLevel * 1.15
-      : state === 'answering' ? 0.15 + this.voiceLevel * 1.25
-      : state === 'thinking' ? 0.34
-      : 0.06;
+    // Ready: a quiet line that stirs with the room, so it is plain the panel is listening for its name.
+    const target = state === 'listening' ? 0.18 + this.micLevel * 1.15
+      : state === 'answering' ? 0.16 + this.voiceLevel * 1.25
+      : state === 'thinking' ? 0.42
+      : 0.1 + this.micLevel * 0.4;
     this.amp += (Math.min(1, target) - this.amp) * (1 - Math.exp(-(target > this.amp ? 20 : 7) * dt));
     const want = WAVE_COLOUR[state];
     const k = 1 - Math.exp(-8 * dt);
@@ -387,5 +396,14 @@ export class AttendingCard {
     this.rest.textContent = this.full.slice(this.count);
     this.answer.classList.toggle('gem__a--on', this.full !== '');
     this.answer.classList.toggle('gem__a--typing', this.count < this.full.length || this.open);
+    // A long answer keeps to six lines: it scrolls up as it is typed, so the line being written is in view.
+    const room = this.answer.clientHeight;
+    if (room > 0 && this.answer.scrollHeight > room + 2) {
+      // Where the writing has got to: the top of the line the not-yet-typed text starts on, plus that line.
+      const line = room / 6;
+      const top = Math.max(0, Math.min(this.answer.scrollHeight - room, this.rest.offsetTop + line * 1.15 - room));
+      this.answer.scrollTop = top;
+      this.answer.classList.toggle('gem__a--scrolled', top > 2);
+    } else this.answer.classList.remove('gem__a--scrolled');
   }
 }

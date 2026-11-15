@@ -1,15 +1,18 @@
 import type { Scene } from '../../app/scene';
 import { Appear } from '../../app/scene';
 import { clamp, damp, ease, progress } from '../../core/dom';
-import { C, css, dot, glow, monoWidth, polyline, text, textHeight, type RGB } from '../draw';
+import { C, css, dot, glow, measure, mix, polyline, text, textHeight, type RGB } from '../draw';
 import type { Frame, Layer } from '../renderer';
 import { WoundSpace } from '../space';
 
 /**
- * Stylised anatomy of the volar forearm, laid along the arm in wound space (millimetres from the centre of
- * the wound; `along` runs toward the elbow, `across` toward the thumb side). It is a teaching diagram, not
- * a scan: positions are plausible, simplified, and arranged so the radial artery passes close beside the
- * wound, which is what the danger zone is about. The wound sits 121 mm from the wrist.
+ * What lies under the wound, drawn in wound space (millimetres from the centre of the wound; `along` runs
+ * toward the elbow, `across` toward the thumb side). It is a teaching diagram, not a scan: positions are
+ * plausible, simplified, and arranged so the radial artery passes close beside the wound, which is what the
+ * danger zone is about.
+ *
+ * The headset already shows a holographic body, so nothing here redraws the arm. The structures are shown
+ * only in a window around the wound: each line fades out a couple of centimetres beyond either end of it.
  */
 type Point = [number, number];
 
@@ -20,48 +23,49 @@ interface Structure {
   color: RGB;
   width: number;
   paths: Point[][];
-  /** Where the label's leader touches the structure, and where the label sits. */
-  anchor: Point;
-  labelAt: Point;
   flow?: boolean;
   /** Fades out toward its last point (tendons disappearing into muscle). */
   fadeOut?: boolean;
+  /** Drawn in the anatomy step without a name (it would crowd the others). */
+  unnamed?: boolean;
+  /** Not part of the anatomy step's picture: shown only when the attending points at it. */
+  onRequest?: boolean;
 }
 
 const WRIST = -121;
 const ELBOW = 139;
+/** How far beyond each end of the wound the structures are drawn, and how far either side of it (mm). */
+const BEYOND = 24;
+const BESIDE = 25;
+/** Length of the fade at each end of the window (mm). */
+const FADE = 10;
 
 const RADIAL: Point[] = [[WRIST, 21], [-90, 19], [-55, 15.5], [-25, 12.6], [0, 11.6], [28, 12.6], [60, 15], [100, 15.5], [ELBOW, 11]];
 
 const STRUCTURES: Structure[] = [
   {
-    id: 'flexor_tendons', label: 'Flexor tendons', color: C.white, width: 1.1, fadeOut: true,
+    id: 'flexor_tendons', label: 'Flexor tendons', color: C.white, width: 1.1, fadeOut: true, onRequest: true,
     paths: [-12.5, -5, 3.5, 10.5].map((c): Point[] => [[WRIST, c], [-92, c * 0.94], [-62, c * 0.84], [-34, c * 0.74]]),
-    anchor: [-96, -4.8], labelAt: [-112, -47],
   },
   {
-    id: 'veins', label: 'Superficial veins', color: C.blue, width: 1.6,
+    id: 'veins', label: 'Superficial vein', color: C.blue, width: 1.6, unnamed: true,
     paths: [
       [[WRIST, 30.5], [-72, 31.5], [-22, 29.5], [28, 31.5], [78, 34.5], [ELBOW, 37]],
       [[WRIST, -30], [-62, -31.5], [0, -29.5], [60, -31.5], [ELBOW, -31]],
       [[WRIST, -7], [-74, -9.6], [-24, -8.8], [26, -10], [74, -6.5], [112, 6], [ELBOW, 17]],
     ],
-    anchor: [66, 33.6], labelAt: [78, 50],
   },
   {
     id: 'median_nerve', label: 'Median nerve', color: C.yellow, width: 1.5,
     paths: [[[WRIST, -1.2], [-62, -2.8], [0, -3.4], [62, -2.6], [ELBOW, -1]]],
-    anchor: [44, -3], labelAt: [58, -47],
   },
   {
     id: 'ulnar_artery', label: 'Ulnar artery', color: C.red, width: 2, flow: true,
     paths: [[[WRIST, -22], [-82, -21], [-42, -19.4], [0, -18.2], [50, -16], [100, -10.5], [ELBOW, -3.5]]],
-    anchor: [-48, -19.6], labelAt: [-26, -61],
   },
   {
     id: 'radial_artery', label: 'Radial artery', color: C.red, width: 2.2, flow: true,
     paths: [RADIAL],
-    anchor: [-40, 14], labelAt: [-54, 50],
   },
 ];
 
@@ -90,19 +94,21 @@ function smooth(points: Point[], perSegment = 10): Point[] {
 const SAMPLED = STRUCTURES.map((s) => s.paths.map((p) => smooth(p)));
 const RADIAL_SAMPLED = smooth(RADIAL, 14);
 
-/** The part of a wrist-to-elbow path that the reveal wipe has reached. */
-function upTo(path: Point[], along: number): Point[] {
+/** The stretch of a wrist-to-elbow path between two positions along the arm, with exact ends. */
+function between(path: Point[], from: number, to: number): Point[] {
   const out: Point[] = [];
+  if (to <= from) return out;
   for (let i = 0; i < path.length; i++) {
-    if (path[i][0] <= along) {
-      out.push(path[i]);
-    } else {
-      if (i > 0) {
-        const a = path[i - 1];
-        const b = path[i];
-        const k = (along - a[0]) / Math.max(1e-6, b[0] - a[0]);
-        out.push([along, a[1] + (b[1] - a[1]) * k]);
-      }
+    const p = path[i];
+    const before = i > 0 ? path[i - 1] : null;
+    if (before && before[0] < from && p[0] >= from) {
+      const k = (from - before[0]) / Math.max(1e-6, p[0] - before[0]);
+      out.push([from, before[1] + (p[1] - before[1]) * k]);
+    }
+    if (p[0] >= from && p[0] <= to) out.push(p);
+    if (before && before[0] <= to && p[0] > to) {
+      const k = (to - before[0]) / Math.max(1e-6, p[0] - before[0]);
+      out.push([to, before[1] + (p[1] - before[1]) * k]);
       break;
     }
   }
@@ -113,6 +119,20 @@ function lengthOf(points: number[]): number {
   let length = 0;
   for (let i = 2; i < points.length; i += 2) length += Math.hypot(points[i] - points[i - 2], points[i + 1] - points[i - 1]);
   return length;
+}
+
+interface Tag {
+  index: number;
+  name: string;
+  color: RGB;
+  alpha: number;
+  size: number;
+  /** Where the structure leaves the window (screen), and where its name wants to be. */
+  fromX: number;
+  fromY: number;
+  x: number;
+  y: number;
+  width: number;
 }
 
 export class AnatomyLayer implements Layer {
@@ -146,82 +166,90 @@ export class AnatomyLayer implements Layer {
 
     const w = new WoundSpace(pose, view, settings.acrossScale);
     const px = w.scale;
+    // The window: the wound plus a margin at each end.
+    const reachOut = w.half + BEYOND;
 
-    // The reveal: a scan line runs wrist to elbow and the anatomy appears behind it.
-    const wipe = this.presence.isOn ? ease.inOutCubic(progress(t, this.presence.since + 0.2, 1.9)) : 1;
-    const reach = WRIST - 6 + (ELBOW - WRIST + 12) * wipe;
+    // The reveal: a scan line crosses the window and the anatomy appears behind it.
+    const wipe = this.presence.isOn ? ease.inOutCubic(progress(t, this.presence.since + 0.2, 1.5)) : 1;
+    const reach = -reachOut - 3 + (reachOut * 2 + 6) * wipe;
     if (full > 0.01 && wipe > 0 && wipe < 1) {
-      glow(ctx, polyline(w.points([[reach, -47], [reach, 47]])), C.cyan, { width: 1.5, alpha: full * conf, bloom: 1.6, halo: 0 });
+      glow(ctx, polyline(w.points([[reach, -BESIDE], [reach, BESIDE]])), C.cyan, { width: 1.6, alpha: full * conf, bloom: 1.7, halo: 0 });
     }
+    this.drawWindow(frame, w, reachOut, full * conf);
 
     this.drawDangerZone(frame, w, Math.max(zoneOn * (step === 'anatomy' ? clamp((reach + 30) / 30, 0, 1) : 1), this.isPointedAt('danger_zone') ? this.highlight : 0) * conf, step === 'anatomy');
+
+    // Names sit where each structure leaves the window, on whichever end is further right on screen.
+    const [leftX] = w.point(-reachOut, 0);
+    const [rightX] = w.point(reachOut, 0);
+    const end = rightX >= leftX ? 1 : -1;
+    const tags: Tag[] = [];
 
     for (let s = 0; s < STRUCTURES.length; s++) {
       const structure = STRUCTURES[s];
       const mine = this.highlighted === structure.id;
       // In the anatomy step everything shows, the pointed-at structure brighter and the rest dimmed.
       // Outside it, only the pointed-at structure appears.
-      const inStepAlpha = full * (this.highlight > 0.01 ? (mine ? 1 : 1 - 0.65 * this.highlight) : 1);
-      const outAlpha = (1 - full) * (mine ? this.highlight : 0);
-      const alpha = (inStepAlpha + outAlpha) * conf;
+      const inStepAlpha = structure.onRequest ? 0 : full * (this.highlight > 0.01 ? (mine ? 1 : 1 - 0.65 * this.highlight) : 1);
+      const outAlpha = (structure.onRequest ? 1 : 1 - full) * (mine ? this.highlight : 0);
+      const alpha = Math.min(1, inStepAlpha + outAlpha) * conf;
       if (alpha <= 0.004) continue;
       const boost = mine ? this.highlight : 0;
-      const limit = full > 0.01 ? reach : ELBOW + 10;
+      const limit = full > 0.01 && !structure.onRequest ? Math.min(reach, reachOut) : reachOut;
+      const width = structure.width + boost * 1.3;
+      let exit: Point | null = null;
 
       for (const path of SAMPLED[s]) {
-        const visible = upTo(path, limit);
-        if (visible.length < 2) continue;
-        const points = w.points(visible);
-        const width = structure.width + boost * 1.3;
-        if (structure.fadeOut) {
-          // Drawn in three pieces of falling brightness, so the tendons melt away into the forearm.
-          const third = Math.floor(points.length / 6) * 2;
-          for (let k = 0; k < 3; k++) {
-            const piece = points.slice(Math.max(0, k * third - 2), k === 2 ? points.length : (k + 1) * third + 2);
-            if (piece.length >= 4) glow(ctx, polyline(piece), structure.color, { width, alpha: alpha * (0.62 - k * 0.2), bloom: 0.5, halo: 0.3 });
+        // Only what runs through the window, and only what is beside the wound.
+        const inside = between(path, -reachOut, limit);
+        if (inside.length < 2 || inside.every((p) => Math.abs(p[1]) > BESIDE)) continue;
+        const first = inside[0][0];
+        const last = inside[inside.length - 1][0];
+        // Each line is solid beside the wound and fades out toward the ends of the window.
+        const pieces: Array<[number, number, number]> = [
+          [-reachOut, -reachOut + FADE * 0.5, 0.22],
+          [-reachOut + FADE * 0.5, -reachOut + FADE, 0.55],
+          [-reachOut + FADE, reachOut - FADE, 1],
+          [reachOut - FADE, reachOut - FADE * 0.5, 0.55],
+          [reachOut - FADE * 0.5, reachOut, 0.22],
+        ];
+        for (const [from, to, strength] of pieces) {
+          const piece = between(inside, Math.max(from, first), Math.min(to, last));
+          if (piece.length < 2) continue;
+          const points = w.points(piece);
+          const fade = structure.fadeOut ? 0.55 : 0.92;
+          glow(ctx, polyline(points), structure.color, { width, alpha: alpha * strength * fade, bloom: (0.8 + boost * 0.9) * strength, halo: 0.5 * strength, cap: 'butt' });
+          if (structure.flow && strength === 1) {
+            // Pulses of blood running toward the hand.
+            const length = lengthOf(points);
+            const beat = 0.5 + 0.5 * Math.sin(t * 7.54); // about 72 beats a minute
+            glow(ctx, polyline(points), [255, 196, 196], {
+              width: width * 0.8, alpha: alpha * (0.55 + 0.45 * beat), bloom: 1 + beat * 0.6, halo: 0,
+              dash: [Math.max(6, 3.6 * px), Math.max(26, 15 * px)], dashOffset: (t * Math.max(46, 30 * px)) % Math.max(1, length + 400),
+            });
           }
-        } else {
-          glow(ctx, polyline(points), structure.color, { width, alpha: alpha * 0.92, bloom: 0.8 + boost * 0.9 });
         }
-        if (structure.flow) {
-          // Pulses of blood running toward the hand.
-          const length = lengthOf(points);
-          const beat = 0.5 + 0.5 * Math.sin(t * 7.54); // about 72 beats a minute
-          glow(ctx, polyline(points), [255, 196, 196], {
-            width: width * 0.8, alpha: alpha * (0.55 + 0.45 * beat), bloom: 1 + beat * 0.6, halo: 0,
-            dash: [Math.max(6, 3.6 * px), Math.max(26, 15 * px)], dashOffset: (t * Math.max(46, 30 * px)) % Math.max(1, length + 400),
-          });
-        }
+        const tip = end > 0 ? inside[inside.length - 1] : inside[0];
+        if (Math.abs(tip[0]) > reachOut - 0.5 || structure.fadeOut) exit = tip;
       }
 
-      // Label on a leader, once the wipe has passed its anchor.
-      const labelIn = full > 0.01 ? ease.outCubic(progress(reach, structure.anchor[0] + 4, 26)) : 1;
+      // The name, once the wipe has reached the end it sits at.
+      if (!exit || (structure.unnamed && !mine)) continue;
+      const labelIn = full > 0.01 && !structure.onRequest ? ease.outCubic(progress(reach, end > 0 ? reachOut - 6 : -reachOut + 8, 8)) : 1;
       const labelAlpha = alpha * labelIn;
-      if (labelAlpha > 0.01) {
-        const [ax, ay] = w.point(structure.anchor[0], structure.anchor[1]);
-        // In the anatomy step labels sit outside the arm. When a single structure is being pointed at in a
-        // closer view, its label comes in next to it instead, so it cannot end up under a HUD panel.
-        const side = structure.labelAt[1] > 0 ? 1 : -1;
-        const nearAlong = structure.anchor[0] + 5;
-        const nearAcross = structure.anchor[1] + side * 9.5;
-        const [lx0, ly0] = w.point(
-          nearAlong + (structure.labelAt[0] - nearAlong) * full,
-          nearAcross + (structure.labelAt[1] - nearAcross) * full,
-        );
-        const size = clamp(2.6 * px, 14.5, 17) + boost * 2;
-        const name = structure.label.toUpperCase();
-        const [lx, ly] = this.clearOfPanels(s, lx0, ly0, monoWidth(name, size, 0.16) / 2, textHeight(size) * 0.8, frame);
-        const points = [ax, ay, lx, ly];
-        glow(ctx, polyline(points), structure.color, {
-          width: 1, alpha: labelAlpha * 0.7, bloom: 0.3, reveal: labelIn, length: Math.hypot(lx - ax, ly - ay), halo: 0.4,
-        });
-        dot(ctx, ax, ay, 2 + boost, structure.color, labelAlpha);
-        const above = structure.labelAt[1] > 0;
-        text(ctx, name, lx, ly + (above ? -9 : 10), {
-          size, color: mine ? C.white : structure.color, alpha: labelAlpha, weight: 600, tracking: 0.16,
-        });
-      }
+      if (labelAlpha <= 0.01) continue;
+      const size = clamp(2.6 * px, 14.5, 17) + boost * 2;
+      const name = structure.label.toUpperCase();
+      const [fromX, fromY] = w.point(exit[0], exit[1]);
+      const [x, y] = w.point(exit[0] + end * 5, exit[1]);
+      tags.push({
+        // Names are a paler tint of their structure's colour: red letters on skin do not carry across a room.
+        index: s, name, color: mine ? C.white : mix(structure.color, C.white, 0.5), alpha: labelAlpha, size, fromX, fromY, x, y,
+        width: measure(ctx, name, { size, font: 'body', weight: 700, tracking: 0.12 }),
+      });
     }
+
+    this.drawTags(frame, tags);
 
     // "The wound": a pulse around it when the attending points at it.
     if (this.isPointedAt('wound') && this.highlight > 0.01) {
@@ -230,6 +258,60 @@ export class AnatomyLayer implements Layer {
       const across = 6 + phase * 5;
       glow(ctx, polyline(w.points([[-half, -across], [half, -across], [half, across], [-half, across]]), true), C.amber, {
         width: 1.5, alpha: this.highlight * conf * (1 - phase), bloom: 1.2, halo: 0.3,
+      });
+    }
+  }
+
+  /** Four small corners marking the part of the arm being looked under. */
+  private drawWindow(frame: Frame, w: WoundSpace, reachOut: number, alpha: number): void {
+    if (alpha <= 0.01) return;
+    const leg = 4;
+    for (const [sa, sc] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as Array<[number, number]>) {
+      const points = w.points([
+        [sa * (reachOut - leg), sc * BESIDE],
+        [sa * reachOut, sc * BESIDE],
+        [sa * reachOut, sc * (BESIDE - leg)],
+      ]);
+      glow(frame.ctx, polyline(points), C.cyan, { width: 1.2, alpha: alpha * 0.6, bloom: 0.5 });
+    }
+  }
+
+  /**
+   * The names, in a column at the end of the window. They are spread so no two touch, kept out from under
+   * the HUD panels, and joined to their structures by a short leader.
+   */
+  private drawTags(frame: Frame, tags: Tag[]): void {
+    if (tags.length === 0) return;
+    const { ctx } = frame;
+    tags.sort((a, b) => a.y - b.y);
+    const gap = textHeight(tags[0].size) * 1.25;
+    // Push apart, then recentre the column on where it wanted to be.
+    const wanted = tags.reduce((sum, tag) => sum + tag.y, 0) / tags.length;
+    for (let i = 1; i < tags.length; i++) tags[i].y = Math.max(tags[i].y, tags[i - 1].y + gap);
+    const shift = wanted - tags.reduce((sum, tag) => sum + tag.y, 0) / tags.length;
+    for (const tag of tags) tag.y += shift;
+
+    // The column is placed as one piece: on the side with room, and moved clear of any HUD panel together,
+    // so the names keep their order and their spacing (and their leaders never cross).
+    const widest = Math.max(...tags.map((tag) => tag.width));
+    const toRight = tags[0].x >= tags[0].fromX;
+    const fits = tags.every((tag) => (toRight ? tag.x + tag.width < frame.width - 12 : tag.x - tag.width > 12));
+    const side = fits ? (toRight ? 1 : -1) : (toRight ? -1 : 1);
+    const height = textHeight(tags[0].size);
+    const top = tags[0].y - height * 0.7;
+    const bottom = tags[tags.length - 1].y + height * 0.7;
+    const middleX = tags.reduce((sum, tag) => sum + tag.x, 0) / tags.length + side * (widest / 2 + 6);
+    const [movedX, movedY] = this.clearOfPanels(0, middleX, (top + bottom) / 2, widest / 2 + 6, (bottom - top) / 2, frame);
+    const dx = movedX - middleX;
+    const dy = movedY - (top + bottom) / 2;
+
+    for (const tag of tags) {
+      const startX = tag.x + dx;
+      const y = tag.y + dy;
+      glow(ctx, polyline([tag.fromX, tag.fromY, startX, y]), tag.color, { width: 1, alpha: tag.alpha * 0.7, bloom: 0.3, halo: 0.4 });
+      dot(ctx, tag.fromX, tag.fromY, 2.2, tag.color, tag.alpha);
+      text(ctx, tag.name, startX + side * 6, y, {
+        size: tag.size, color: tag.color, alpha: tag.alpha, font: 'body', weight: 700, tracking: 0.12, align: side > 0 ? 'left' : 'right',
       });
     }
   }
@@ -324,7 +406,7 @@ export class AnatomyLayer implements Layer {
 
     const [tx, ty] = w.point(0, centre[Math.floor(centre.length / 2)][1] + halfWidth + 5.2);
     text(ctx, 'DANGER ZONE', tx, ty, {
-      size: clamp(2.6 * px, 14.5, 18), color: [255, 150, 158], alpha: alpha * (0.85 + 0.15 * pulse), weight: 700, tracking: 0.24,
+      size: clamp(2.6 * px, 14.5, 18), color: [255, 150, 158], alpha: alpha * (0.85 + 0.15 * pulse), font: 'body', weight: 800, tracking: 0.2,
     });
   }
 }

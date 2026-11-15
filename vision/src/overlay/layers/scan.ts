@@ -98,7 +98,7 @@ export class ScanLayer implements Layer {
     const done = percent >= 100;
     const readY = height - Math.max(70, height * 0.11);
     text(ctx, done ? 'FIELD MAPPED' : 'SCANNING FIELD', width / 2, readY, {
-      size: 17, color: done ? C.green : C.cyan, alpha: presence, tracking: 0.26, weight: 600,
+      size: 17, color: done ? C.green : C.cyan, alpha: presence, font: 'body', tracking: 0.22, weight: 700,
     });
     const barWidth = Math.min(380, width * 0.26);
     const barY = readY + 27;

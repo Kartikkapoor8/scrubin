@@ -1,13 +1,14 @@
 import type { Scene } from '../../app/scene';
 import { Appear } from '../../app/scene';
-import { ease, progress } from '../../core/dom';
-import { C, glow, polyline, text } from '../draw';
+import { ease, lerp, progress, spring } from '../../core/dom';
+import { C, dot, glow, measure, polyline, text } from '../draw';
 import type { Frame, Layer } from '../renderer';
 import { WoundSpace } from '../space';
 
 /**
- * Shows that the wound has been found: four corner brackets that close in on the marker line the moment
- * tracking locks, then sit quietly around it. They step aside while the plan and the stitches are showing.
+ * Shows that the wound has been found: four corner brackets that spring shut on the marker line the moment
+ * tracking locks, a line of light that sweeps across them, and a "wound locked" tag. They then sit quietly
+ * around the wound, swept now and then, and step aside while the plan and the stitches are showing.
  */
 export class WoundLockLayer implements Layer {
   private presence = new Appear(4, 5);
@@ -33,7 +34,7 @@ export class WoundLockLayer implements Layer {
     if (this.searching > 0.01) {
       const dots = '.'.repeat(1 + (Math.floor(t * 2) % 3));
       text(ctx, `LOOKING FOR THE WOUND${dots.padEnd(3, ' ')}`, frame.width / 2, frame.height * 0.84, {
-        size: 16, color: C.cyan, alpha: this.searching * (0.7 + 0.25 * Math.sin(t * 2.4)), tracking: 0.24, weight: 600,
+        size: 16, color: C.cyan, alpha: this.searching * (0.7 + 0.25 * Math.sin(t * 2.4)), font: 'body', tracking: 0.2, weight: 700,
       });
     }
 
@@ -42,11 +43,11 @@ export class WoundLockLayer implements Layer {
     if (presence <= 0.003) return;
 
     const w = new WoundSpace(pose, view, settings.acrossScale);
-    const closing = ease.outQuart(progress(t, this.lockedAt, 0.7));
-    const grow = 1 + (1 - closing) * 1.4; // brackets start wide and close in
+    const since = t - this.lockedAt;
+    const grow = 1 + (1 - spring(since)) * 1.4; // brackets start wide and spring shut
     const halfAlong = (w.half + 6) * grow;
     const halfAcross = 7.5 * grow;
-    const leg = 4.2;
+    const leg = 5;
     const quiet = step === 'standby' ? 1 : 0.55;
 
     const corners: Array<[number, number]> = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
@@ -56,14 +57,30 @@ export class WoundLockLayer implements Layer {
         [sa * halfAlong, sc * halfAcross],
         [sa * halfAlong, sc * (halfAcross - leg)],
       ]);
-      glow(ctx, polyline(points), C.cyan, { width: 1.6, alpha: presence * quiet, bloom: 0.8 });
+      glow(ctx, polyline(points), C.cyan, { width: 2, alpha: presence * quiet, bloom: 0.9 });
+    }
+    // A tick at the middle of each long side, pointing at the wound.
+    for (const sc of [-1, 1]) {
+      glow(ctx, polyline(w.points([[0, sc * halfAcross], [0, sc * (halfAcross - 2)]])), C.cyan, { width: 1.4, alpha: presence * quiet * 0.8, bloom: 0.6 });
+    }
+
+    // A line of light crosses the brackets as they lock, and again every few seconds while they wait.
+    const pass = since < 1 ? since / 0.8 : ((since - 1) % 3.6) / 0.9;
+    if (pass > 0 && pass < 1) {
+      const along = lerp(-halfAlong, halfAlong, ease.inOutCubic(pass));
+      const strength = Math.sin(Math.PI * pass) * (since < 1 ? 1 : 0.5);
+      glow(ctx, polyline(w.points([[along, -halfAcross], [along, halfAcross]])), C.white, {
+        width: 1.4, alpha: presence * quiet * strength, bloom: 1.8, halo: 0,
+      });
     }
 
     // A small tag while standing by, so the audience can see the system has found its target.
     if (step === 'standby') {
-      const tagAlpha = presence * ease.outCubic(progress(t, this.lockedAt + 0.45, 0.5));
+      const tagAlpha = presence * ease.outCubic(progress(t, this.lockedAt + 0.4, 0.45));
       const [tx, ty] = w.point(0, halfAcross + 5.5);
-      text(ctx, 'WOUND LOCKED', tx, ty, { size: 13, color: C.cyan, alpha: tagAlpha, tracking: 0.22, weight: 600 });
+      const options = { size: 13, font: 'body' as const, tracking: 0.18, weight: 700 };
+      text(ctx, 'WOUND LOCKED', tx, ty, { ...options, color: C.cyan, alpha: tagAlpha });
+      dot(ctx, tx - measure(ctx, 'WOUND LOCKED', options) / 2 - 12, ty, 3.2, C.green, tagAlpha);
     }
   }
 }

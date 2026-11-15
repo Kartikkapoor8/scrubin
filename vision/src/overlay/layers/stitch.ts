@@ -1,8 +1,8 @@
 import type { Scene } from '../../app/scene';
-import { clamp, ease, lerp, progress } from '../../core/dom';
+import { clamp, ease, lerp, pop, progress } from '../../core/dom';
 import { PROCEDURE, sutureOffsetMm } from '../../procedure/data';
 import { STITCH_SECONDS } from '../../procedure/machine';
-import { C, check, circle, dot, glow, mix, polyline, type RGB } from '../draw';
+import { C, check, circle, dot, glow, mix, polyline, text, type RGB } from '../draw';
 import type { Frame, Layer } from '../renderer';
 import { WoundSpace } from '../space';
 
@@ -54,6 +54,7 @@ export class StitchLayer implements Layer {
       const [kx, ky] = w.point(along, biteMm + 4.4);
       check(ctx, kx, ky, clamp(2.6 * px, 9, 16), C.green, conf, ease.outCubic(progress(since, 0.1, 0.4)));
       if (since < 0.9) this.burst(frame, w, along, since / 0.9, conf);
+      if (i > 0 && step === 'stitch') this.spacing(frame, w, i, since, conf);
     }
 
     const run = procedure.stitch;
@@ -119,11 +120,38 @@ export class StitchLayer implements Layer {
     }
 
     // 4. The knot pops as the loop comes tight.
-    const knot = ease.outBack(progress(time, STITCH_SECONDS - 0.34, 0.3));
+    const knot = pop(time - (STITCH_SECONDS - 0.34));
     if (knot > 0.01) {
       const [kx, ky] = w.point(along, biteMm);
       dot(ctx, kx, ky, clamp(1.25 * px, 3.2, 9) * 0.62 * knot, C.white, conf);
     }
+  }
+
+  /**
+   * The measured gap between a suture and the one before it: a dimension line on the near side that draws
+   * itself as the suture is confirmed, with the number counting up to the measurement.
+   */
+  private spacing(frame: Frame, w: WoundSpace, index: number, since: number, conf: number): void {
+    const { ctx } = frame;
+    const { biteMm, measuredSpacingMm, spacingMm } = PROCEDURE.sutures;
+    const px = w.scale;
+    const measured = measuredSpacingMm[index] > 0 ? measuredSpacingMm[index] : spacingMm;
+    // Only when there is room for the number between two sutures.
+    if (spacingMm * px < 46) return;
+    const across = -(biteMm + 9.2);
+    const from = sutureOffsetMm(index - 1);
+    const to = sutureOffsetMm(index);
+    const drawn = ease.outCubic(progress(since, 0.15, 0.45));
+    if (drawn <= 0.003) return;
+    const [ax, ay] = w.point(from, across);
+    const [bx, by] = w.point(to, across);
+    glow(ctx, polyline([ax, ay, bx, by]), C.green, { width: 1.2, alpha: conf * 0.9, bloom: 0.5, reveal: drawn, length: Math.hypot(bx - ax, by - ay) });
+    for (const end of [from, to]) {
+      glow(ctx, polyline(w.points([[end, across - 1.2], [end, across + 1.2]])), C.green, { width: 1.2, alpha: conf * drawn, bloom: 0.5 });
+    }
+    const counted = measured * ease.outQuart(progress(since, 0.25, 0.7));
+    const [tx, ty] = w.point((from + to) / 2, across - 3.2);
+    text(ctx, counted.toFixed(1), tx, ty, { size: clamp(1.9 * px, 11, 14), color: C.green, alpha: conf * drawn, weight: 600, tracking: 0 });
   }
 
   /** The moment a suture is confirmed: a ring and sparks thrown outward. */

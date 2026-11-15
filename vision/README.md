@@ -33,8 +33,8 @@ This is how the app behaves by default.
 - **Idle screen.** After 8 quiet seconds in Ready the screen shows the name, one line of what it is and
   "Ready". Any key, clicker press or remote button brings the working view back. `?attract=20` changes the
   wait; `?attract=0` turns the idle screen off.
-- **`R` is instant.** Back to Ready with no fades: overlays cleared, zoom reset, the attending cut off
-  mid-sentence. Pressing Next on the score card does the same, so one button runs group after group.
+- **`R` is instant.** Back to Ready with no fades: overlays cleared, zoom reset, Gemini cut off
+  mid-sentence. Pressing Next on the debrief does the same, so one button runs group after group.
 - **It tidies up by itself.** A finished run goes back to Ready after 45 s (`?done=`), an abandoned one
   after 3 minutes (`?idle=`). `0` means never.
 - **Bluetooth presenter.** Forward (`PageDown`) is Next, back (`PageUp`) is Back, and the "blank screen"
@@ -43,11 +43,15 @@ This is how the app behaves by default.
   4-digit PIN. The address and PIN are in the `?` help and in the server's start-up lines. Buttons: **NEXT**,
   **HOLD TO TALK**, **BACK**, **RESET**. `VISION_REMOTE_PIN=1234` fixes the PIN; `VISION_REMOTE=0` turns the
   remote off.
-- **Push-to-talk.** The microphone reaches Gemini only while a talk button is held (`G`, the presenter's
-  blank button, or HOLD TO TALK on the phone). A quick tap also works: it listens until you stop speaking.
-  Because the attending cannot hear itself, its **voice is on by default**. `?talk=open` goes back to an
+- **Hands-free: "Hey Gemini".** Say it and ask; the question ends when you stop speaking. Chrome's Web
+  Speech API listens for the phrase (it needs the internet; `?wake=0` turns it off).
+- **Push-to-talk** is always there as well: hold `Space` (a tap is still Next), hold `G`, the presenter's
+  blank button, or HOLD TO TALK on the phone. A quick tap of a talk button also works: it listens until you
+  stop speaking. The microphone reaches Gemini only during a question and never while Gemini is thinking or
+  speaking, so its **voice is on by default** and it cannot interrupt itself. `?talk=open` goes back to an
   always-open microphone.
-- **Captions.** The question as it is heard and the answer as it is spoken appear large at the bottom.
+- **The Gemini panel** (top right) shows the question as it is spoken, the answer typing out, a waveform for
+  listening / thinking / speaking, and one line of procedure context ("Step 5 of 6 · Suture 2 of 5").
 - **Sized for two metres.** Every screen was checked at a quarter of its size; anything a judge must read
   survives that. `?big=0` gives the smaller lettering on the picture (for a close-up screen recording).
 
@@ -98,33 +102,41 @@ whether or not it is aligned.
 | Ready | The wound is found and bracketed: "Wound locked". |
 | Scan | A scan line sweeps the picture; a second pass leaves contour arcs over the arm. |
 | Assess | The wound is measured: extension lines, a dimension line, "42 mm". |
-| Anatomy | A scan line runs wrist to elbow and the anatomy appears behind it: radial and ulnar arteries in red with blood pulsing toward the hand, superficial veins in blue, the median nerve in yellow, flexor tendons in white, each labelled on a leader. A hatched red **danger zone** marks the radial artery beside the wound. |
+| Anatomy | The view moves in on the wound. A scan line crosses a window around it and what lies underneath appears behind the line: the radial and ulnar arteries in red with blood pulsing toward the hand, the median nerve in yellow, a superficial vein in blue, named at the end of the window. A hatched red **danger zone** marks the radial artery beside the wound. Nothing is drawn away from the wound: the headset's holographic body is already in the picture. |
 | Plan | Five numbered targets with entry and exit points, the 8 mm spacing ruler, the 5 mm bite. The view zooms in. |
-| Stitch | One suture per press: the target tightens, a curved needle passes under the wound, the thread is pulled flat, the knot pops, the suture turns green with a burst and "Suture 3/5 · spacing 7.9 mm ✓ · depth ✓". The Attending comments on each. |
-| Complete | The view pulls back; the score card fills: sutures, average spacing, depth, time. |
+| Stitch | One suture per press: the target tightens, a curved needle passes under the wound, the thread is pulled flat, the knot pops, the suture turns green with a burst, the measured gap to the last suture is drawn under it, and a card confirms it: "Suture 3/5 · Spacing 7.9 mm ✓ · Depth ✓" with a one-line comment. |
+| Complete | The debrief comes up along the bottom: a ring that fills to 5/5, average spacing, depth, time, each number counting up. |
 
-From Assess onward the **vitals panel** (top right) shows a sweeping ECG, heart rate, blood pressure and SpO2.
-The danger zone stays on, dashed, through Plan and Stitch. The anatomy is a teaching diagram laid out in
+The **step rail** (left) lists the six steps, fills as they are done, and opens the current one into a card
+with its name, what to do, and the suture count. The danger zone stays on, dashed, through Plan and Stitch. The anatomy is a teaching diagram laid out in
 millimetres from the wound (`src/overlay/layers/anatomy.ts`), not a scan of the real arm; it assumes the
 wound is drawn along the forearm, about 12 cm from the wrist, with the thumb side on the far side of the
 picture (`Z` flips the side, `X` flips wrist and elbow).
 
 Wording, counts and timings live in `src/procedure/data.ts`. **Autoplay** (`A`) runs the whole thing hands-free
-for recording, and stops on the score card; `?autoplay=1` in the address starts it at launch. Sounds are
+for recording, and stops on the debrief; `?autoplay=1` in the address starts it at launch. Sounds are
 synthesised in the page (`N` mutes them; `?sound=0`).
 
-## The Gemini attending
+## Gemini (the attending)
 
-With a key configured the attending connects by itself at launch (the browser asks for the microphone the
-first time; `Shift` + `G` turns it off and on, `?attending=0` starts without it). Hold `G`, ask out loud,
-"what's that artery?", and let go: the question appears as it is heard, then the answer, spoken and
-captioned, with the current step as context.
+With a key configured Gemini connects by itself at launch (the browser asks for the microphone the first
+time; `Shift` + `G` turns it off and on, `?attending=0` starts without it) and its panel appears top right.
+Say "Hey Gemini, what's that artery?", or hold `Space` (or `G`, or the clicker's talk button), ask, and let
+go: the question appears as it is spoken, then the answer, typed out and spoken, with the current step as
+context. Without a session the panel is simply not there; the demo runs the same.
 
-- **Setup:** put `GEMINI_API_KEY` in `vision/.env.local`. The chip at the bottom shows "Attending listening"
-  when it is connected.
+- **Setup:** put `GEMINI_API_KEY` in `vision/.env.local`. The chip at the bottom shows "Gemini ready" when it
+  is connected ("Gemini offline" after three failed attempts; it keeps trying).
+- **"Hey Gemini"** is heard by Chrome's Web Speech API (`src/brain/wake.ts`), which sends the microphone to
+  Google's speech service, so it needs Chrome and the internet. When the phrase is recognised the Live turn
+  opens with the last 1.8 s of audio, so the question is whole; a pause ends it. Nothing is heard while
+  Gemini is thinking or speaking. The panel's hint says "Say “Hey Gemini”" while this is working and "Hold
+  Space and ask" when it is not. Only the greeting triggers it; the word "Gemini" alone does not.
+- **The panel** keeps a long answer to six lines (it scrolls as it is typed), clears a question that got no
+  answer, and drops the previous answer the moment a new question starts.
 - **Model:** `gemini-3.8-live`, the default Live model in Google's docs when this was built (2026-11-14).
-  Set `GEMINI_LIVE_MODEL` to change it. It answers in speech; the card shows the transcript of what it says,
-  replaced by a written card when it sends one.
+  Set `GEMINI_LIVE_MODEL` to change it. It answers in speech; the panel shows the transcript of what it says,
+  replaced by a written answer when it sends one.
 - **The key stays on the server.** The page asks `POST /api/gemini-token` for an ephemeral token each time it
   opens a session: single use, two minutes to start a session, thirty to talk, locked to that model.
 - **What it can do (tools):** `show_answer_card`, `highlight_structure` (radial artery, ulnar artery, veins,
@@ -142,31 +154,34 @@ captioned, with the current step as context.
 
 **Test it with nobody at the microphone:** `node dev/ask.mjs` (with the app running). It speaks five
 questions with macOS `say`, feeds them through the page's own path to the Live session, and checks that each
-was heard, appeared on the card, was answered in captions and in voice, and that the tool calls fired
-(highlight, next step, repeat, look at the view). It prints the compatibility level the session opened at.
+was heard, appeared on the panel, was answered in writing and in voice, and that the tool calls fired
+(highlight, next step, repeat, look at the view). It then runs a hands-free turn: the recogniser's results
+are fed in ("hey gemini, how many sutures are planned"), and the turn must open on the wake phrase, show the
+question without it, end on the pause and be answered. It prints the compatibility level the session opened at.
 `node dev/ask.mjs --dry` runs the same checks against a stand-in session, with no key.
 
 Not yet run against the real API: there was no key on the machine this was built on. The token request was
-checked as far as Google's "API key not valid" reply, and the card, tools and step changes were exercised
+checked as far as Google's "API key not valid" reply, and the panel, tools and step changes were exercised
 with simulated Live messages and the dry run above. First thing to do with a real key: `node dev/ask.mjs`.
 If Gemini refuses a session before it starts, the app steps down by itself: first to plain tools with an
 unlocked token and none of the optional session features, then to no tools at all (answers still appear on
-the card). If even that is refused it stops and shows Google's reason in the banner; the browser console has
-the detail. Tell the Mac agent which level it settled on (`__viper.brain` in the console shows `compat`).
+the panel). If even that is refused it stops and says "Gemini is not available right now"; Google's reason
+is in the browser console. Tell the Mac agent which level it settled on (`__viper.brain` in the console shows `compat`).
 
 ## Keys
 
 | Key | Action |
 |-----|--------|
-| `Space`, `→`, or a clicker's forward button (`PageDown`) | Next: place the next suture; when none are left, next step; on the score card, start over |
+| `Space` (tap), `→`, or a clicker's forward button (`PageDown`) | Next: place the next suture; when none are left, next step; on the debrief, start over |
+| `Space` (hold) | Talk to Gemini: hold, ask, let go |
 | `←` or a clicker's back button (`PageUp`) | Previous step |
 | `Shift` + `→` | Next step, skipping any sutures not yet placed |
 | `S` | Place the next suture |
 | `R` | Reset to Ready, instantly |
 | `A` | Autoplay (for recording the video) |
 | `H` | Hide every overlay |
-| `G` (hold), `B`, `.` | Talk to the attending: hold and speak, or tap and speak |
-| `Shift` + `G` / `V` / `L` | Attending on or off / its voice on or off / send it the current picture |
+| `G` (hold), `B`, `.` | Talk to Gemini: hold and speak, or tap and speak |
+| `Shift` + `G` / `V` / `L` | Gemini on or off / its voice on or off / send it the current picture |
 | `1` `2` `3` `4` | Input: HoloLens / webcam / video file / simulated arm |
 | `C` / `Shift` + `C` | Record the raw HoloLens stream to `vision/media/` (press again to stop) / record exactly 60 s |
 | `K` / `Shift` + `M` / `J` | Pick the marker colour by clicking it / step through colour presets / ignore holograms on or off |
@@ -252,6 +267,7 @@ the tracker.
 | Space Grotesk, Inter, JetBrains Mono (via `@fontsource-variable/*`) | SIL Open Font License 1.1 |
 | MediaPipe Tasks Vision and the Hand Landmarker model | Apache 2.0 |
 | `@google/genai` | Apache 2.0 |
+| Motion (`motion`): the spring animation of the panels | MIT |
 | Vite, TypeScript, Playwright (development only) | MIT / Apache 2.0 |
 
 ## Before going on stage
@@ -299,6 +315,6 @@ renders a test clip (an arm enters, holds, gets red marker cuts, leaves) to feed
 | `src/tracking/` | Wound detection and smoothing; MediaPipe hands. |
 | `src/procedure/` | The step script (`data.ts`) and the state machine every control goes through. |
 | `src/overlay/` | The canvas overlays: glow primitives, wound space, one file per layer in `layers/`. |
-| `src/ui/` | The DOM panels: brand and chips, step panel, vitals, captions (Attending card), feedback line, score card, title, idle screen. |
-| `src/brain/` | The Gemini attending: microphone, Live session, tools. |
+| `src/ui/` | The DOM panels: brand and chips, the step rail, the Gemini panel, suture feedback, the debrief, the title and the idle screen. `hud.css` holds their look and the type scale; `motion.ts` is the one spring they all move with (Motion). |
+| `src/brain/` | Gemini: microphone, Live session, tools, and the "Hey Gemini" listener (`wake.ts`). |
 | `dev/` | Mock HoloLens Device Portal (and raw replay of a capture), the headless screenshot script, the spoken-question test for the attending, the preflight check. |

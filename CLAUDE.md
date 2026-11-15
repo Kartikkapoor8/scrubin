@@ -39,7 +39,10 @@ which is what the Mac tracks. The HoloLens app therefore draws nothing over the 
 - **Rules for the look:** brand colours only (cyan #3FE0FF, white, near-black, green #4DFFB0, amber #FFB547,
   red #FF4D5E; blue and yellow only for veins and nerve), Space Grotesk / Inter / JetBrains Mono, thin glowing
   lines with a dark halo so they read on skin, and nothing pops: every element eases or traces in
-  (`Appear` in `src/app/scene.ts`). The corner label "Trainee view · concept" is always visible.
+  (`Appear` in `src/app/scene.ts`; the DOM panels move on one spring through Motion, `src/ui/motion.ts`,
+  and share one type scale in `src/ui/hud.css`). Numbers are in JetBrains Mono, everything else that is read
+  in Inter, titles in Space Grotesk. Green means good, amber caution, red danger. The corner label
+  "Training simulator · concept" is always visible.
 - **Checking it:** `npm run check` (types), then `node dev/shot.mjs ...` for headless-Chrome screenshots, and
   `node dev/mock-hololens.mjs` for a fake headset stream. Look at the screenshots before pushing.
 

@@ -71,6 +71,8 @@ export class AttendingBrain {
   private handle = '';
   private retryTimer = 0;
   private retryDelay = 1000;
+  /** Connection attempts that failed since the last session that opened. */
+  private dropped = 0;
   private generation = 0;
 
   /**
@@ -374,9 +376,15 @@ export class AttendingBrain {
     this.setState('off');
   }
 
+  /** Gemini has not answered several connection attempts in a row. It keeps trying; the operator's chip says so. */
+  get offline(): boolean {
+    return this.dropped >= 3;
+  }
+
   private scheduleReconnect(detail: string): void {
     if (!this.wanted) return;
     this.session = null;
+    this.dropped++;
     this.setState('connecting', detail);
     window.clearTimeout(this.retryTimer);
     this.retryTimer = window.setTimeout(() => void this.connect(), this.retryDelay);
@@ -440,6 +448,7 @@ export class AttendingBrain {
           onopen: () => {
             if (generation !== this.generation) return;
             this.retryDelay = 1000;
+            this.dropped = 0;
             this.setState('listening');
           },
           onmessage: (message: LiveServerMessage) => {
@@ -501,7 +510,10 @@ export class AttendingBrain {
     this.generation++;
     this.session = null;
     this.mic.stop();
-    this.setState('error', `Gemini would not start a session: ${reason.slice(0, 140)}`);
+    this.wake.stop();
+    // The reason is for the console; the screen only ever says, calmly, that Gemini is not there.
+    console.warn('[attending] Gemini would not start a session:', reason);
+    this.setState('error', 'Gemini is not available right now');
     return true;
   }
 
@@ -560,7 +572,11 @@ export class AttendingBrain {
   private endTurn(): void {
     window.clearTimeout(this.thinkTimer);
     window.clearTimeout(this.answerTimer);
-    if (this.userSpoke) this.card.finish(9);
+    if (this.userSpoke) {
+      // Answered: keep it up for a while. Heard but not answered (it was not meant for Gemini): clear it.
+      if (this.answer.trim() || this.cardShown) this.card.finish(9);
+      else this.card.hide();
+    }
     this.turnActive = false;
     this.userSpoke = false;
     if (this.state !== 'off' && this.state !== 'error' && this.state !== 'connecting') this.setState(this.wanted ? 'listening' : 'off');

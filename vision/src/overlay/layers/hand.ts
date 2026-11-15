@@ -122,7 +122,7 @@ export class HandLayer implements Layer {
     }
 
     if (this.aligned > 0.02) {
-      text(ctx, 'ALIGNED', sx, sy - radius - 18, { size: 15, color: C.green, alpha: alpha * this.aligned, tracking: 0.24, weight: 700 });
+      text(ctx, 'ALIGNED', sx, sy - radius - 18, { size: 15, color: C.green, alpha: alpha * this.aligned, font: 'body', tracking: 0.2, weight: 800 });
     } else if (distance >= 0 && distance < 60) {
       text(ctx, `${Math.round(distance)} mm`, sx, sy - radius - 16, { size: 12.5, color: C.white, alpha: alpha * 0.85, weight: 500 });
     }
