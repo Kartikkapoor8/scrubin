@@ -60,53 +60,71 @@ if (config.hololens?.configured) {
   line(probe.ok ? 'ok' : 'FIX', 'Headset reachable and login accepted', probe.ok ? '' : why);
 
   if (probe.ok) {
-    // Read a few seconds of the live stream and say what is in it.
-    const started = Date.now();
-    const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), 7000);
-    const chunks = [];
-    let total = 0;
-    let firstByte = -1;
-    let failure = '';
-    try {
-      const res = await fetch(`${base}/api/stream`, { signal: abort.signal });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        failure = body.detail || `the relay answered ${res.status}`;
-      } else {
-        const reader = res.body.getReader();
-        for (;;) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          if (firstByte < 0) firstByte = Date.now() - started;
-          chunks.push(Buffer.from(value));
-          total += value.length;
-          if (total > 3_000_000 || Date.now() - started > 5000) { abort.abort(); break; }
-        }
-      }
-    } catch (err) {
-      if (total === 0) failure = err.name === 'AbortError' ? 'no video arrived in 7 s (is something else already pulling the stream?)' : err.message;
+    // Read a few seconds of each stream preset and say what is in it. The fragment length is the part of the
+    // delay the headset itself adds before anything can be shown; the app's lag probe (Shift+Y, headset
+    // looking at the screen) measures the whole chain.
+    const results = [];
+    for (const quality of ['high', 'med', 'low']) {
+      const sample = await sampleStream(quality);
+      results.push({ quality, ...sample });
+      if (sample.failure) { line(quality === 'high' ? 'FIX' : 'note', `live_${quality}`, sample.failure); continue; }
+      line('ok', `live_${quality}`, `first bytes after ${sample.firstByte} ms, ${sample.mbps.toFixed(1)} Mbit/s, ${sample.report.summary}`);
+      for (const text of sample.report.lines) line('info', `  ${text}`);
     }
-    clearTimeout(timer);
-    if (failure) {
-      line('FIX', 'Live stream', failure);
+    const good = results.filter((r) => !r.failure && r.report.playable);
+    streamOk = good.length > 0;
+    const main = good.find((r) => r.quality === 'high') || good[0];
+    if (!main) {
+      const first = results.find((r) => !r.failure);
+      if (first) line('FIX', 'Stream format', first.report.problem);
+    } else if (main.report.needsRepack) {
+      line(ffmpeg ? 'ok' : 'note', 'Playback route', ffmpeg
+        ? 'Chrome\'s low-latency player will refuse this as sent; the relay repackages it automatically (still about 0.1 s behind)'
+        : 'Chrome\'s low-latency player will refuse this and ffmpeg is missing: the slower route (about 0.6 s behind) will be used');
     } else {
-      const buf = Buffer.concat(chunks);
-      const seconds = (Date.now() - started - Math.max(0, firstByte)) / 1000;
-      line('ok', 'Live stream', `first bytes after ${firstByte} ms, ${(total / 1048576 / Math.max(0.5, seconds) * 8).toFixed(1)} Mbit/s`);
-      const report = describe(buf);
-      for (const text of report.lines) line('info', text);
-      streamOk = report.playable;
-      if (!report.playable) line('FIX', 'Stream format', report.problem);
-      else if (report.needsRepack) {
-        line(ffmpeg ? 'ok' : 'note', 'Playback route', ffmpeg
-          ? 'Chrome\'s low-latency player will refuse this as sent; the relay repackages it automatically (still about 0.1 s behind)'
-          : 'Chrome\'s low-latency player will refuse this and ffmpeg is missing: the slower route (about 0.6 s behind) will be used');
-      } else {
-        line('ok', 'Playback route', 'low-latency, as sent');
-      }
+      line('ok', 'Playback route', 'low-latency, as sent');
+    }
+    const timed = good.filter((r) => r.report.fragmentMs > 0).sort((a, b) => a.report.fragmentMs - b.report.fragmentMs);
+    if (timed.length > 1) {
+      line('info', `Shortest fragments: live_${timed[0].quality} (${timed[0].report.fragmentMs} ms). In the app, Shift+Y with the headset looking at the screen measures each preset end to end and keeps the fastest.`);
     }
   }
+}
+
+/** A few seconds of one stream preset through the relay: when the first bytes came, the bit rate, what is in it. */
+async function sampleStream(quality) {
+  const started = Date.now();
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 7000);
+  const chunks = [];
+  let total = 0;
+  let firstByte = -1;
+  let failure = '';
+  try {
+    const res = await fetch(`${base}/api/stream?q=${quality}`, { signal: abort.signal });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      failure = body.detail || `the relay answered ${res.status}`;
+    } else {
+      const reader = res.body.getReader();
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (firstByte < 0) firstByte = Date.now() - started;
+        chunks.push(Buffer.from(value));
+        total += value.length;
+        if (total > 3_000_000 || Date.now() - started > 5000) { abort.abort(); break; }
+      }
+    }
+  } catch (err) {
+    if (total === 0) failure = err.name === 'AbortError' ? 'no video arrived in 7 s (is something else already pulling the stream?)' : err.message;
+  }
+  clearTimeout(timer);
+  // The headset serves one capture at a time: give it a moment to let go before the next preset.
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  if (failure) return { failure };
+  const seconds = (Date.now() - started - Math.max(0, firstByte)) / 1000;
+  return { failure: '', firstByte, mbps: (total / 1048576 / Math.max(0.5, seconds)) * 8, report: describe(Buffer.concat(chunks)) };
 }
 
 // ---- Gemini ----
@@ -141,7 +159,7 @@ function describe(buf) {
   const top = [...boxes(0, buf.length)];
   lines.push(`boxes: ${top.slice(0, 10).map((b) => b.type).join(' ')}${top.length > 10 ? ' ...' : ''}`);
   const moov = top.find((b) => b.type === 'moov' && b.complete);
-  if (!moov) return { lines, playable: false, needsRepack: false, problem: 'no complete moov box at the start: this is not a fragmented MP4 a browser can start from' };
+  if (!moov) return { lines, playable: false, needsRepack: false, problem: 'no complete moov box at the start: this is not a fragmented MP4 a browser can start from', fragmentMs: 0, summary: 'no moov' };
 
   const tracks = new Map();
   for (const trak of boxes(moov.body, moov.end)) {
@@ -167,11 +185,13 @@ function describe(buf) {
     } else if (handler === 'soun') {
       codec = buf.indexOf('mp4a', trak.start, 'latin1') > 0 ? 'AAC audio' : 'audio';
     }
-    tracks.set(id, { timescale, handler });
+    tracks.set(id, { timescale, handler, size: handler === 'vide' ? `${width}x${height}` : '' });
     lines.push(`track ${id}: ${handler === 'vide' ? `video ${width}x${height}, ${codec}` : codec || handler}, timescale ${timescale}`);
   }
   const video = [...tracks.entries()].find(([, tr]) => tr.handler === 'vide');
-  if (!video) return { lines, playable: false, needsRepack: false, problem: 'the stream has no video track' };
+  let fragmentMs = 0;
+  const size = video ? video[1].size : '';
+  if (!video) return { lines, playable: false, needsRepack: false, problem: 'the stream has no video track', fragmentMs: 0, summary: 'no video' };
 
   let based = false;
   let noClock = false;
@@ -198,6 +218,7 @@ function describe(buf) {
       + `${noClock ? ', no decode times (tfdt)' : ''}`
       + `, data addressed ${based ? 'from the start of the stream (base data offset)' : 'from each fragment'}`);
     if (each > 0.6) lines.push(`long fragments: expect about ${each.toFixed(1)} s of extra delay on every route`);
+    fragmentMs = Math.round(each * 1000);
   }
-  return { lines, playable: true, needsRepack: based, problem: '' };
+  return { lines, playable: true, needsRepack: based, problem: '', fragmentMs, summary: `${size}${fragmentMs ? `, ${fragmentMs} ms fragments` : ''}` };
 }

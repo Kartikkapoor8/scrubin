@@ -256,9 +256,11 @@ the tracker.
 
 ## Before going on stage
 
-0. `node dev/preflight.mjs` (with the app running): ten seconds, and it says whether the settings, the
-   headset, the stream's format and the Gemini key are in order, and what to fix. It never prints an
-   address, a login or a key.
+0. `node dev/preflight.mjs` (with the app running): about twenty seconds, and it says whether the settings,
+   the headset, the stream's format and the Gemini key are in order, and what to fix. It samples
+   `live_high`, `live_med` and `live_low` in turn and prints each one's picture size, fragment length (the
+   delay the headset adds before anything can be shown), bit rate and time to first byte. It never prints
+   an address, a login or a key.
 1. `npm run build && npm start`, open http://localhost:4747 in Chrome, press `F`.
 2. Press `1` (HoloLens). If the chip does not go green in a few seconds, `2` (webcam) or `3` (a recorded clip in
    `vision/media/`) or `4` (simulated arm) keep the show going; `1` again retries.
