@@ -1279,6 +1279,7 @@ body {
   user-select: text;
 }
 .help__remote:empty { display: none; }
-.help { width: min(calc(var(--u) * 96), 90vw); }
+/* The key list sits above every panel: it must be readable whatever else is on screen. */
+.help { width: min(calc(var(--u) * 104), 92vw); z-index: 60; background: rgba(var(--ink-rgb), 0.94); }
 .help__row { font-size: calc(var(--u) * 1.4); }
 .help__keys { min-width: calc(var(--u) * 7.5); font-size: calc(var(--u) * 1.2); }
