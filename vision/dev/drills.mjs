@@ -342,7 +342,13 @@ async function soak(minutes) {
   await runningDemo(page, 0);
   const file = path.join(out, 'soak.jsonl');
   fs.writeFileSync(file, '');
-  const browserPid = browser.process()?.pid;
+  // Chrome's main process is a child of this script (as are the two servers); its helpers are its children.
+  const childPids = (pid) => {
+    try { return execFileSync('pgrep', ['-P', String(pid)], { encoding: 'utf8' }).trim().split('\n').map(Number).filter(Boolean); } catch { return []; }
+  };
+  const browserPid = childPids(process.pid).find((pid) => {
+    try { return /Chrome/.test(execFileSync('ps', ['-o', 'comm=', '-p', String(pid)], { encoding: 'utf8' })); } catch { return false; }
+  });
   const psStats = (pids) => {
     if (!pids.length) return { cpu: 0, rssMb: 0 };
     try {
@@ -352,10 +358,7 @@ async function soak(minutes) {
       return { cpu: +cpu.toFixed(1), rssMb: +(rss / 1024).toFixed(0) };
     } catch { return { cpu: 0, rssMb: 0 }; }
   };
-  const chromePids = () => {
-    if (!browserPid) return [];
-    try { return [browserPid, ...execFileSync('pgrep', ['-P', String(browserPid)], { encoding: 'utf8' }).trim().split('\n').map(Number).filter(Boolean)]; } catch { return [browserPid]; }
-  };
+  const chromePids = () => (browserPid ? [browserPid, ...childPids(browserPid)] : []);
   const started = Date.now();
   let runs = 0;
   let nextSample = 0;
