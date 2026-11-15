@@ -9,18 +9,26 @@ export class Sounds {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
 
+  constructor() {
+    // Made at load, suspended: creating an AudioContext takes about 80 ms, which on the first key press was the
+    // one dropped frame of a whole run (the first Next of every demo). The first key press now only resumes it.
+    this.create();
+  }
+
+  private create(): void {
+    try {
+      this.ctx = new AudioContext();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.22;
+      this.master.connect(this.ctx.destination);
+    } catch {
+      this.ctx = null;
+    }
+  }
+
   /** Call from a key or click handler. */
   unlock(): void {
-    if (!this.ctx) {
-      try {
-        this.ctx = new AudioContext();
-        this.master = this.ctx.createGain();
-        this.master.gain.value = 0.22;
-        this.master.connect(this.ctx.destination);
-      } catch {
-        this.ctx = null;
-      }
-    }
+    if (!this.ctx) this.create();
     if (this.ctx && this.ctx.state === 'suspended') void this.ctx.resume();
   }
 
