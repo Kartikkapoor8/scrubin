@@ -27,6 +27,8 @@ export class InputManager {
   };
   private auto = false;
   private wasLive = false;
+  /** The headset stream preset: live_high, live_med or live_low on the Device Portal. */
+  private hlQuality: HoloLensQuality = loadQuality();
   private startupTimer = 0;
   private generation = 0;
 
@@ -65,12 +67,28 @@ export class InputManager {
     return this.file.hasFile;
   }
 
+  get quality(): HoloLensQuality {
+    return this.hlQuality;
+  }
+
+  /** Change the headset stream preset (remembered). Reconnects at once if the headset is the current input. */
+  setQuality(quality: HoloLensQuality): void {
+    this.hlQuality = quality;
+    try { localStorage.setItem(QUALITY_KEY, quality); } catch { /* not kept */ }
+    if (this.snapshot.kind === 'hololens') this.startSource('hololens');
+  }
+
+  /** The low-latency player's numbers while the headset is the input (null otherwise). */
+  get streamStats(): HoloLensSource['stats'] | null {
+    return this.source instanceof HoloLensSource ? this.source.stats : null;
+  }
+
   private create(kind: SourceKind): InputSource {
     switch (kind) {
       case 'hololens': {
         // ?hlmode=progressive or ?hlmode=remux forces one way of playing the stream (see HoloLensSource).
         const forced = new URLSearchParams(location.search).get('hlmode');
-        return new HoloLensSource('high', forced === 'progressive' || forced === 'remux' ? forced : '');
+        return new HoloLensSource(this.hlQuality, forced === 'progressive' || forced === 'remux' ? forced : '');
       }
       case 'webcam': return new WebcamSource();
       case 'file': return this.file;
@@ -119,4 +137,19 @@ export class InputManager {
     this.snapshot = { ...this.snapshot, fellBackFrom: `${name}: ${reason}` };
     this.startSource(next);
   }
+}
+
+export type HoloLensQuality = 'high' | 'med' | 'low';
+export const QUALITIES: HoloLensQuality[] = ['high', 'med', 'low'];
+const QUALITY_KEY = 'viper.hlq';
+
+/** ?hlq=high|med|low in the address, else the preset last chosen (by key Q or the latency sweep), else high. */
+function loadQuality(): HoloLensQuality {
+  const wanted = new URLSearchParams(location.search).get('hlq');
+  if (wanted === 'high' || wanted === 'med' || wanted === 'low') return wanted;
+  try {
+    const saved = localStorage.getItem(QUALITY_KEY);
+    if (saved === 'high' || saved === 'med' || saved === 'low') return saved;
+  } catch { /* storage blocked */ }
+  return 'high';
 }

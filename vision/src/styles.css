@@ -1396,3 +1396,28 @@ body {
   text-transform: uppercase;
   color: var(--text);
 }
+
+/* ---------- Lag probe (with the sync clock, key Y): a patch that flashes at random moments ---------- */
+
+.latency-patch {
+  position: absolute;
+  top: 34vh;
+  left: calc(var(--u) * 2);
+  width: 24vh;
+  height: 24vh;
+  background: #000;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  display: none;
+  z-index: 40;
+}
+.latency-patch--on { display: block; }
+.latency-patch--lit { background: #fff; }
+
+.sync-clock__result {
+  margin-top: calc(var(--u) * 1.6);
+  font-family: var(--font-mono);
+  font-size: calc(var(--u) * 1.5);
+  line-height: 1.5;
+  white-space: pre-line;
+  color: #0b5566;
+}

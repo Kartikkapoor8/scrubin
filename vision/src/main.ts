@@ -7,7 +7,8 @@ import { loadSettings, saveSettings, type Scene } from './app/scene';
 import { ArmMode } from './arm/mode';
 import { add, clamp, el } from './core/dom';
 import { Viewport } from './core/viewport';
-import { InputManager } from './input/manager';
+import { InputManager, QUALITIES, type HoloLensQuality } from './input/manager';
+import { LatencyProbe } from './input/latency';
 import type { SourceKind } from './input/types';
 import { Sounds } from './app/audio';
 import { StreamRecording } from './app/recording';
@@ -77,7 +78,9 @@ const KEYS: Array<[string, string]> = [
   ['F', 'Full screen'],
   ['O', 'Fill the screen / show the whole picture'],
   ['D', 'Tracking debug view'],
-  ['Y', 'Sync clock: measure how far the headset picture trails real life'],
+  ['Y', 'Sync clock and lag probe: look at this screen through the headset; the lag is measured for you'],
+  ['Shift Y', 'Latency sweep: measures live_high, live_med and live_low (headset looking at this screen), keeps the fastest'],
+  ['Q', 'Headset stream preset: high / med / low (remembered)'],
   ['- =', 'Suture trigger delay, to match that lag (HoloLens input only)'],
   ['?', 'Show or hide this list'],
 ];
@@ -152,7 +155,10 @@ async function boot(): Promise<void> {
   // A running clock for measuring how far the headset's picture trails real life (key Y).
   const syncClock = add(hud.root, el('div', 'sync-clock'));
   const syncDigits = add(syncClock, el('div', 'sync-clock__digits', '00.0'));
-  add(syncClock, el('div', 'sync-clock__note', 'Point the headset at this screen. The clock in its picture is behind this one by the lag. Set it with - and =, then Y.'));
+  add(syncClock, el('div', 'sync-clock__note', 'Look at this screen through the headset. The lag is measured from the flashing square (left); the clock in the picture trails this one by the same amount. Set the suture delay with - and =, then Y.'));
+  const syncResult = add(syncClock, el('div', 'sync-clock__result', ''));
+  // Flashes on a random schedule while the clock is up; finds that pattern in the headset's picture.
+  const probe = new LatencyProbe(hud.root);
   const sounds = new Sounds();
   if (params.get('sound') === '0') sounds.muted = true;
   // Arm mode: the backup demo on a bare forearm (key M, ?mode=arm). Its canvases sit between the picture and the HUD.
@@ -431,7 +437,18 @@ async function boot(): Promise<void> {
       case 's': case 'S': actions.stitch(); break;
       // The lag of the headset's picture: Y shows a running clock to measure it (point the headset at this
       // screen and compare the clock with its own image), - and = set it.
-      case 'y': case 'Y': syncClock.classList.toggle('sync-clock--on'); break;
+      case 'y': case 'Y':
+        if (event.shiftKey) { void latencySweep(); break; }
+        syncClock.classList.toggle('sync-clock--on');
+        if (syncClock.classList.contains('sync-clock--on')) probe.start(); else if (!sweeping) probe.stop();
+        break;
+      case 'q': case 'Q': {
+        const next = QUALITIES[(QUALITIES.indexOf(input.quality) + 1) % QUALITIES.length];
+        input.setQuality(next);
+        probe.reset();
+        hud.notice(`Headset stream: live_${next}${input.current.kind === 'hololens' ? ' (reconnecting)' : ' (used for input 1)'}`, 2200);
+        break;
+      }
       case '-': case '_': case '=': case '+': {
         const step = event.key === '-' || event.key === '_' ? -100 : 100;
         settings.inputDelayMs = clamp(settings.inputDelayMs + step, 0, 5000);
@@ -520,10 +537,90 @@ async function boot(): Promise<void> {
     if (arm.active) arm.analyze(video, now);
     else tracker.update(detector.analyze(video, scene.marker, tracker.hint), scene.marker, dt);
   };
+  // ----- Latency: the probe's measurement, the player's numbers, and a sweep over the stream presets -----
+  let videoFrames = 0;
+  let lastResultAt = 0;
+  let sweeping = false;
+  let sweepText = '';
+  const stream = () => input.streamStats;
+  const describeLag = (): string => {
+    const est = probe.estimate;
+    const st = stream();
+    const measured = est ? `Measured ${(est.delayMs / 1000).toFixed(2)} s glass to glass (match ${est.confidence.toFixed(2)})` : 'Measuring: keep the flashing square in the headset\u2019s view';
+    const player = st ? `live_${st.quality} \u00B7 ${st.mode} \u00B7 buffer ${(st.floor * 1000).toFixed(0)}\u2013${(st.lag * 1000).toFixed(0)} ms \u00B7 speed ${st.rate.toFixed(2)} \u00B7 fragments ${st.fragmentMs.toFixed(0)} ms \u00B7 stalls ${st.stalls}` : `Input: ${input.current.label}`;
+    return `${measured}\n${player}`;
+  };
+  const waitFor = (test: () => boolean, ms: number) => new Promise<boolean>((resolve) => {
+    const started = performance.now();
+    const timer = window.setInterval(() => {
+      if (test()) { window.clearInterval(timer); resolve(true); }
+      else if (performance.now() - started > ms) { window.clearInterval(timer); resolve(false); }
+    }, 100);
+  });
+  /**
+   * Shift+Y: for each stream preset, reconnect, let the player settle, and measure the glass-to-glass delay
+   * with the probe (the headset must be looking at this screen). Keeps the fastest preset that played cleanly.
+   */
+  const latencySweep = async () => {
+    if (sweeping) return;
+    if (!config.hololens.configured) { hud.notice('The latency sweep needs the headset: add its settings to vision/.env.local', 5000); return; }
+    sweeping = true;
+    syncClock.classList.add('sync-clock--on');
+    probe.start();
+    const results: Array<{ quality: HoloLensQuality; delayMs: number | null; confidence: number; size: string; fps: number; stalls: number; bufferMs: number }> = [];
+    const before = input.quality;
+    if (input.current.kind !== 'hololens') input.choose('hololens');
+    for (const quality of QUALITIES) {
+      sweepText = `Latency sweep: live_${quality} (${results.length + 1} of ${QUALITIES.length}). Keep looking at this screen.`;
+      input.setQuality(quality);
+      const live = await waitFor(() => input.current.status.state === 'live' && video.readyState >= 2, 12000);
+      if (!live) { results.push({ quality, delayMs: null, confidence: 0, size: 'no picture', fps: 0, stalls: 0, bufferMs: 0 }); continue; }
+      await new Promise((r) => window.setTimeout(r, 2500));
+      probe.reset();
+      const framesAt = videoFrames;
+      const startedAt = performance.now();
+      const stallsAt = stream()?.stalls ?? 0;
+      let good = 0;
+      await waitFor(() => {
+        if (probe.estimate && probe.estimate.confidence >= 0.6) good++;
+        return good >= 8;
+      }, 11000);
+      const seconds = (performance.now() - startedAt) / 1000;
+      const st = stream();
+      results.push({
+        quality,
+        delayMs: probe.estimate ? probe.estimate.delayMs : null,
+        confidence: probe.estimate ? probe.estimate.confidence : 0,
+        size: `${video.videoWidth}x${video.videoHeight}`,
+        fps: Math.round((videoFrames - framesAt) / Math.max(0.1, seconds)),
+        stalls: (st?.stalls ?? 0) - stallsAt,
+        bufferMs: Math.round((st?.floor ?? 0) * 1000),
+      });
+    }
+    // Fastest that played cleanly; low only if it is clearly faster than med (it is the softest picture).
+    const clean = results.filter((r) => r.delayMs !== null && r.stalls <= 1 && r.fps >= 20).sort((a, b) => (a.delayMs ?? 0) - (b.delayMs ?? 0));
+    let pick: HoloLensQuality = before;
+    if (clean.length) {
+      pick = clean[0].quality;
+      const med = clean.find((r) => r.quality === 'med');
+      if (pick === 'low' && med && (med.delayMs ?? 0) - (clean[0].delayMs ?? 0) < 80) pick = 'med';
+    }
+    input.setQuality(pick);
+    const table = results.map((r) => `live_${r.quality}: ${r.delayMs === null ? 'not measured' : `${(r.delayMs / 1000).toFixed(2)} s`}  ${r.size} ${r.fps} fps  stalls ${r.stalls}  buffer ${r.bufferMs} ms`).join('\n');
+    sweepText = `${clean.length ? `Kept live_${pick}.` : 'The headset never saw the flashing square: nothing measured, preset unchanged.'}\n${table}`;
+    console.table(results);
+    (window as unknown as { __latency: unknown }).__latency = { results, pick };
+    hud.notice(clean.length ? `Latency sweep: kept live_${pick} (${((clean.find((r) => r.quality === pick)?.delayMs ?? 0) / 1000).toFixed(2)} s)` : 'Latency sweep: nothing measured', 6000);
+    sweeping = false;
+    window.setTimeout(() => { if (!sweeping) sweepText = ''; }, 30000);
+  };
+
   const frameCallbacks = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
   if (frameCallbacks) {
-    const onVideoFrame = (now: number) => {
+    const onVideoFrame = (now: number, frame: VideoFrameCallbackMetadata) => {
       analyze(now);
+      videoFrames++;
+      if (probe.active) probe.sample(video, frame.expectedDisplayTime || now);
       video.requestVideoFrameCallback(onVideoFrame);
     };
     video.requestVideoFrameCallback(onVideoFrame);
@@ -555,6 +652,7 @@ async function boot(): Promise<void> {
     view: () => ({ zoom: +view.zoom.toFixed(2), fit: view.fit }),
     marker: () => scene.marker,
     arm: () => arm.debugInfo(),
+    stream: () => ({ quality: input.quality, player: input.streamStats, probe: probe.estimate, probing: probe.active }),
     fps: () => ({ fps: +fps.toFixed(1), worstFrameMs: +worstFrame.toFixed(1) }),
   };
   (window as unknown as { __viper: unknown }).__viper = {
@@ -566,6 +664,8 @@ async function boot(): Promise<void> {
     /** Ask the attending a typed question (needs the Gemini session to be on: press G first). */
     ask: (text: string) => brain.ask(text),
     captureView: () => brainHost.captureView(),
+    /** The lag probe's maths with a made-up delay (no headset needed): __viper.latencySelfTest(850). */
+    latencySelfTest: (delayMs: number) => probe.selfTest(delayMs),
   };
 
   // ----- The frame loop -----
@@ -663,8 +763,13 @@ async function boot(): Promise<void> {
       }
     }
 
+    probe.tick(now);
     if (syncClock.classList.contains('sync-clock--on')) {
       syncDigits.textContent = ((now / 1000) % 100).toFixed(1).padStart(4, '0');
+      if (now - lastResultAt > 250) {
+        lastResultAt = now;
+        syncResult.textContent = sweepText || describeLag();
+      }
     }
 
     renderer.resize(stage.clientWidth, stage.clientHeight);

@@ -205,6 +205,19 @@ the detail. Tell the Mac agent which level it settled on (`__viper.brain` in the
   who presses as the trainee's hand lands sees the stitch play when the screen shows it land. Step changes
   and Reset are never delayed, and other inputs ignore the setting. If the operator watches the screen
   rather than the hands, leave it at 0.
+- **Measuring it for you, and picking the fastest preset.** While the clock is up (`Y`) a square on the left
+  of the screen flashes at random moments; when the headset looks at the screen, the app finds that pattern
+  in the picture and shows the real glass-to-glass delay (camera, encoder, network, relay, player, display),
+  no reading of digits needed. `Shift` + `Y` runs a sweep: it plays `live_high`, `live_med` and `live_low` in
+  turn (keep looking at the screen for about 40 s), measures each, and keeps the fastest one that played
+  cleanly (`live_low` only if it beats `live_med` by more than 80 ms). `Q` steps through the presets by hand;
+  `?hlq=med` picks one in the address. The choice is remembered. `__viper.latencySelfTest(850)` checks the
+  maths with no headset.
+- **Staying at the live edge.** Fragments arrive whole, so the picture's lead over the newest frame is a
+  sawtooth. The player watches its low point (just before the next fragment lands) and plays 3 to 15% faster
+  or 3% slower to keep it about 50 ms from empty, jumping to the edge if it falls more than 1.2 s behind;
+  after a stall it keeps 0.2 s in hand for 8 s. On the mock headset that is 90 to 160 ms of buffer with
+  100 ms fragments (it was up to 450 ms before). The sync clock panel shows the live numbers.
 - **Recording.** `C` saves the stream exactly as the headset sent it to `vision/media/hololens-<date>-<time>.mp4`
   (no re-encoding; press `C` again to stop, `Shift` + `C` for exactly 60 s). Key `3` plays the newest clip, so a
   recording is at once the backup for a dead headset and footage for the video.

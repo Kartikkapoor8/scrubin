@@ -61,6 +61,9 @@ if (!clip && !process.argv.includes('--raw')) {
 // Raw replay of a captured live stream.
 
 const RAW = arg('raw', '');
+// --frag <ms>: fragment length of the generated stream (default 100), to see how the player copes with a
+// headset that sends bigger pieces.
+const FRAG_MS = Number(arg('frag', '100'));
 const RAW_LOOP = process.argv.includes('--loop');
 const RAW_SECONDS = Number(arg('raw-seconds', '10'));
 
@@ -239,7 +242,7 @@ const handler = (req, res) => {
     const ffmpeg = spawn('ffmpeg', ['-loglevel', 'error', '-re', '-stream_loop', '-1', '-i', clip, '-an',
       '-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-profile:v', 'main', '-pix_fmt', 'yuv420p',
       '-g', '15', '-r', '30', '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-      '-frag_duration', '100000', 'pipe:1'], { stdio: ['ignore', 'pipe', 'inherit'] });
+      '-frag_duration', String(FRAG_MS * 1000), 'pipe:1'], { stdio: ['ignore', 'pipe', 'inherit'] });
     ffmpeg.stdout.pipe(res);
     const timer = DROP_AFTER > 0 ? setTimeout(() => { console.log('[mock] dropping the stream'); res.destroy(); }, DROP_AFTER * 1000) : null;
     const stop = () => { clearTimeout(timer); ffmpeg.kill('SIGKILL'); };

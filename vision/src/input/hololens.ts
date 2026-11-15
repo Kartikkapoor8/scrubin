@@ -36,9 +36,17 @@ export class HoloLensSource implements InputSource {
   private remux: boolean;
   private canRemux = true;
 
+  /**
+   * What the low-latency player is doing (for the latency readout and checks). `lag` is how far the picture
+   * is behind the newest frame received, `floor` the low point of that over the last few seconds (just before
+   * the next fragment lands), `margin` what the controller keeps in hand against a late fragment.
+   */
+  readonly stats = { quality: '', mode: '', lag: 0, floor: 0, margin: 0, rate: 1, stalls: 0, fragmentMs: 0 };
+
   constructor(private quality: 'high' | 'med' | 'low' = 'high', force: 'progressive' | 'remux' | '' = '') {
     this.mode = force === 'progressive' ? 'progressive' : 'mse';
     this.remux = force === 'remux';
+    this.stats.quality = quality;
   }
 
   start(video: HTMLVideoElement, onStatus: (status: SourceStatus) => void): void {
@@ -157,6 +165,7 @@ export class HoloLensSource implements InputSource {
 
   /** Fallback playback: give the relayed stream straight to the video element and watch that it keeps moving. */
   private playProgressive(video: HTMLVideoElement): void {
+    this.stats.mode = 'progressive';
     video.srcObject = null;
     video.src = `/api/stream?q=${this.quality}&t=${Date.now()}`;
     void video.play().catch(() => {});
@@ -217,6 +226,9 @@ export class HoloLensSource implements InputSource {
           return;
         }
         video.playbackRate = lag > 3 ? 1.6 : lag > 1.2 ? 1.15 : 1;
+        this.stats.lag = lag;
+        this.stats.floor = lag;
+        this.stats.rate = video.playbackRate;
       }
       if (video.paused) void video.play().catch(() => {});
     }, 250);
@@ -278,17 +290,49 @@ export class HoloLensSource implements InputSource {
 
     void video.play().catch(() => { /* autoplay is muted; a blocked play resolves on the next user input */ });
 
-    // Hold the picture close to the live edge: speed up a little when behind, jump when far behind.
+    // Hold the picture at the live edge. Fragments arrive whole, so the buffer ahead of the picture is a
+    // sawtooth: it jumps up when one lands and drains until the next. What matters is its low point (just
+    // before a fragment lands): keep that a hair above empty by playing a touch faster or slower, and jump
+    // straight to the edge if it has fallen far behind. After a stall (a fragment came late), keep more in hand
+    // for a while. This adapts to whatever fragment size the headset uses, and to each stream preset.
+    const stats = this.stats;
+    stats.mode = this.remux ? 'mse-remux' : 'mse';
+    stats.stalls = 0;
     let announced = false;
     const begunAt = performance.now();
     let movedAt = begunAt;
     let lastTime = -1;
+    let lastStallAt = -1e9;
+    let lastEnd = 0;
+    const lags: Array<{ at: number; lag: number }> = [];
+    const onWaiting = () => {
+      if (!announced) return;
+      stats.stalls++;
+      lastStallAt = performance.now();
+    };
+    video.addEventListener('waiting', onWaiting);
+    signal.addEventListener('abort', () => video.removeEventListener('waiting', onWaiting), { once: true });
     window.clearInterval(this.chaseTimer);
     this.chaseTimer = window.setInterval(() => {
       if (buffer.buffered.length === 0) return;
+      const now = performance.now();
       const end = buffer.buffered.end(buffer.buffered.length - 1);
       const start = buffer.buffered.start(0);
       const lag = end - video.currentTime;
+      if (end > lastEnd + 0.001) {
+        // A fragment landed: how much picture it carried, roughly.
+        if (lastEnd > 0) stats.fragmentMs += ((end - lastEnd) * 1000 - stats.fragmentMs) * 0.2;
+        lastEnd = end;
+      }
+      lags.push({ at: now, lag });
+      while (lags.length && now - lags[0].at > 3000) lags.shift();
+      let floor = Infinity;
+      for (const sample of lags) floor = Math.min(floor, sample.lag);
+      const margin = 0.05 + (now - lastStallAt < 8000 ? 0.15 : 0);
+      stats.lag = lag;
+      stats.floor = floor;
+      stats.margin = margin;
+
       // A hole in what has arrived (a lost fragment, or one track missing a moment): playback stops dead in
       // front of it. Step over it at once instead of waiting there.
       let hole = -1;
@@ -296,17 +340,19 @@ export class HoloLensSource implements InputSource {
         const stuckAtEnd = video.currentTime >= buffer.buffered.end(i) - 0.12 && video.currentTime < buffer.buffered.start(i + 1);
         if (stuckAtEnd) hole = buffer.buffered.start(i + 1) + 0.02;
       }
+      let rate = 1;
       if (hole >= 0) {
         video.currentTime = hole;
-      } else if (video.currentTime < start || lag > 2.5) {
-        video.currentTime = Math.max(start, end - 0.25);
-      } else if (lag > 0.8) {
-        video.playbackRate = 1.25;
-      } else if (lag > 0.45) {
-        video.playbackRate = 1.08;
-      } else {
-        video.playbackRate = 1;
+      } else if (video.currentTime < start || lag > Math.max(1.2, (stats.fragmentMs / 1000) * 2.5)) {
+        // Far behind (start-up, or the page was busy): jump to just behind the newest picture.
+        video.currentTime = Math.max(start, end - margin - 0.02);
+        lags.length = 0;
+      } else if (lags.length > 4 && now - lags[0].at > 600) {
+        const excess = floor - margin;
+        rate = excess > 0.45 ? 1.15 : excess > 0.15 ? 1.07 : excess > 0.04 ? 1.03 : excess < -0.02 ? 0.97 : 1;
       }
+      if (video.playbackRate !== rate) video.playbackRate = rate;
+      stats.rate = rate;
       if (video.paused) void video.play().catch(() => {});
       if (Math.abs(video.currentTime - lastTime) > 0.04) {
         lastTime = video.currentTime;
@@ -318,7 +364,7 @@ export class HoloLensSource implements InputSource {
         this.retryDelay = 500;
         this.onStatus({ state: 'live', detail: '' });
       }
-    }, 200);
+    }, 100);
 
     for (;;) {
       const { value, done } = await reader.read();
