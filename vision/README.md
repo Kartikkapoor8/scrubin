@@ -45,7 +45,8 @@ This is how the app behaves by default.
   remote off.
 - **Hands-free: "Hey Gemini".** Say it and ask; the question ends when you stop speaking. Chrome's Web
   Speech API listens for the phrase (it needs the internet; `?wake=0` turns it off).
-- **Push-to-talk** is always there as well: hold `Space` (a tap is still Next), hold `G`, the presenter's
+- **Push-to-talk** is always there as well: hold `Space` (a tap is still Next, and so is a slow press in
+  which nothing is said; with no Gemini session Space is simply Next), hold `G`, the presenter's
   blank button, or HOLD TO TALK on the phone. A quick tap of a talk button also works: it listens until you
   stop speaking. The microphone reaches Gemini only during a question and never while Gemini is thinking or
   speaking, so its **voice is on by default** and it cannot interrupt itself. `?talk=open` goes back to an
@@ -173,7 +174,7 @@ is in the browser console. Tell the Mac agent which level it settled on (`__vipe
 | Key | Action |
 |-----|--------|
 | `Space` (tap), `→`, or a clicker's forward button (`PageDown`) | Next: place the next suture; when none are left, next step; on the debrief, start over |
-| `Space` (hold) | Talk to Gemini: hold, ask, let go |
+| `Space` (hold) | Talk to Gemini: hold, ask, let go. Only while a Gemini session is up (otherwise Space is simply Next); a slow press with nothing said also counts as Next |
 | `←` or a clicker's back button (`PageUp`) | Previous step |
 | `Shift` + `→` | Next step, skipping any sutures not yet placed |
 | `S` | Place the next suture |

@@ -169,8 +169,8 @@
 .gem__wave {
   display: block;
   width: 100%;
-  height: calc(var(--u) * 6);
-  margin: calc(var(--u) * 0.5) 0 calc(var(--u) * 0.3);
+  height: calc(var(--u) * 7);
+  margin: calc(var(--u) * 0.3) 0 calc(var(--u) * 0.2);
 }
 
 .gem__body { overflow: hidden; }
@@ -187,13 +187,12 @@
 .gem__q--on { display: block; }
 /* While it is being spoken, the question is the main thing on the panel. */
 .gem[data-state='listening'] .gem__q { color: #fff; font-size: var(--t-lg); font-weight: 600; }
+/* A cursor after the words so far. It is a character, so it can never be left alone on a new line. */
 .gem[data-state='listening'] .gem__q::after {
-  content: '';
-  display: inline-block;
-  width: 0.55em;
-  height: 0.12em;
-  margin-left: 0.18em;
-  background: var(--green);
+  content: '_';
+  margin-left: 0.06em;
+  font-weight: 700;
+  color: var(--green);
   animation: blink 700ms steps(2, start) infinite;
 }
 
@@ -219,7 +218,6 @@
 /* A long answer keeps to six lines and scrolls as it is typed; what has scrolled away fades at the top. */
 .gem__a {
   position: relative;
-  max-height: calc(var(--t-lg) * 1.24 * 6);
   overflow: hidden;
   scroll-behavior: smooth;
 }
@@ -232,6 +230,8 @@
   overflow: hidden;
 }
 .gem__q:not(.gem__q--on) { display: none; }
+/* While it is being spoken the question is not clipped, and its cursor stays on the line being written. */
+.gem[data-state='listening'] .gem__q--on { display: block; }
 .gem__rest { opacity: 0; }
 .gem__caret {
   display: none;

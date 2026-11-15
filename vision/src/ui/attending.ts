@@ -57,6 +57,7 @@ export class AttendingCard {
   /** Gemini's voice is still playing: the panel stays on "Speaking" until it stops. */
   private voiceOn = false;
   private typed = false;
+  private lineHeight = 0;
 
   // The waveform.
   private micLevel = 0;
@@ -96,6 +97,7 @@ export class AttendingCard {
     // The body follows the height of what is in it, whatever changed it (words arriving, fonts loading,
     // the window being resized).
     new ResizeObserver(() => this.fit()).observe(this.inner);
+    window.addEventListener('resize', () => { this.lineHeight = 0; });
   }
 
   /** The session is up (show the panel) or not (take it away). */
@@ -207,6 +209,10 @@ export class AttendingCard {
   wake(state: AttendingState, question = ''): void {
     // A new question (or the talk button going down): the previous answer no longer belongs here, even
     // if it was still being typed or spoken.
+    if (state === 'listening' && this.actionLine.classList.contains('gem__action--on') && this.state !== 'listening') {
+      window.clearTimeout(this.actionTimer);
+      this.actionLine.classList.remove('gem__action--on');
+    }
     if (state === 'listening' && this.full !== '') {
       window.clearInterval(this.timer);
       this.timer = 0;
@@ -258,10 +264,10 @@ export class AttendingCard {
 
     const state = this.state;
     // Ready: a quiet line that stirs with the room, so it is plain the panel is listening for its name.
-    const target = state === 'listening' ? 0.18 + this.micLevel * 1.15
-      : state === 'answering' ? 0.16 + this.voiceLevel * 1.25
-      : state === 'thinking' ? 0.42
-      : 0.1 + this.micLevel * 0.4;
+    const target = state === 'listening' ? 0.3 + this.micLevel * 1.05
+      : state === 'answering' ? 0.3 + this.voiceLevel * 1.1
+      : state === 'thinking' ? 0.8
+      : 0.17 + this.micLevel * 0.4;
     this.amp += (Math.min(1, target) - this.amp) * (1 - Math.exp(-(target > this.amp ? 20 : 7) * dt));
     const want = WAVE_COLOUR[state];
     const k = 1 - Math.exp(-8 * dt);
@@ -273,13 +279,13 @@ export class AttendingCard {
     // While thinking, a packet of energy runs along the line again and again.
     const packet = ((t * 0.62) % 1.3) - 0.15;
     const layers = [
-      { freq: 1.55, speed: 2.3, gain: 1, line: 2.2, alpha: 0.95 },
-      { freq: 2.6, speed: -3.2, gain: 0.6, line: 1.5, alpha: 0.55 },
-      { freq: 4.2, speed: 4.6, gain: 0.34, line: 1.1, alpha: 0.38 },
+      { freq: 1.55, speed: 2.3, gain: 1, line: 2.4, alpha: 0.95 },
+      { freq: 2.6, speed: -3.2, gain: 0.68, line: 1.6, alpha: 0.6 },
+      { freq: 4.2, speed: 4.6, gain: 0.42, line: 1.2, alpha: 0.42 },
     ];
     const yAt = (u: number, layer: (typeof layers)[number], index: number): number => {
       let envelope = Math.pow(Math.sin(Math.PI * u), 1.6);
-      if (state === 'thinking') envelope *= 0.3 + 0.95 * Math.exp(-((u - packet) ** 2) / 0.022);
+      if (state === 'thinking') envelope *= 0.22 + 0.95 * Math.exp(-((u - packet) ** 2) / 0.03);
       const wobble = 0.72 + 0.28 * Math.sin(t * 1.3 + u * 3.1 + index * 2.1);
       return Math.sin(u * layer.freq * Math.PI * 2 + t * layer.speed + index * 1.7) * envelope * wobble * this.amp * layer.gain * reach;
     };
@@ -401,14 +407,20 @@ export class AttendingCard {
     this.rest.textContent = this.full.slice(this.count);
     this.answer.classList.toggle('gem__a--on', this.full !== '');
     this.answer.classList.toggle('gem__a--typing', this.count < this.full.length || this.open);
-    // A long answer keeps to six lines: it scrolls up as it is typed, so the line being written is in view.
-    const room = this.answer.clientHeight;
-    if (room > 0 && this.answer.scrollHeight > room + 2) {
-      // Where the writing has got to: the top of the line the not-yet-typed text starts on, plus that line.
-      const line = room / 6;
-      const top = Math.max(0, Math.min(this.answer.scrollHeight - room, this.rest.offsetTop + line * 1.15 - room));
-      this.answer.scrollTop = top;
-      this.answer.classList.toggle('gem__a--scrolled', top > 2);
-    } else this.answer.classList.remove('gem__a--scrolled');
+    if (this.full === '') {
+      this.answer.style.maxHeight = '';
+      this.answer.classList.remove('gem__a--scrolled');
+      return;
+    }
+    // The whole answer is laid out from the start (the part not yet typed is there, unseen), so words never
+    // jump between lines; the box shows only as far as the line being written, and grows with it. A long
+    // answer keeps to six lines: from then on it scrolls up as it is typed.
+    const line = this.lineHeight || (this.lineHeight = parseFloat(getComputedStyle(this.answer).lineHeight) || 30);
+    const written = this.rest.offsetTop + line; // bottom of the line the writing has reached
+    const room = Math.min(written, line * 6);
+    this.answer.style.maxHeight = `${Math.ceil(room)}px`;
+    const top = Math.max(0, Math.min(this.answer.scrollHeight - room, written - room));
+    this.answer.scrollTop = top;
+    this.answer.classList.toggle('gem__a--scrolled', top > 2);
   }
 }
