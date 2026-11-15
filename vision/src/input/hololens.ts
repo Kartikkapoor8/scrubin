@@ -289,7 +289,16 @@ export class HoloLensSource implements InputSource {
       const end = buffer.buffered.end(buffer.buffered.length - 1);
       const start = buffer.buffered.start(0);
       const lag = end - video.currentTime;
-      if (video.currentTime < start || lag > 2.5) {
+      // A hole in what has arrived (a lost fragment, or one track missing a moment): playback stops dead in
+      // front of it. Step over it at once instead of waiting there.
+      let hole = -1;
+      for (let i = 0; i < buffer.buffered.length - 1; i++) {
+        const stuckAtEnd = video.currentTime >= buffer.buffered.end(i) - 0.12 && video.currentTime < buffer.buffered.start(i + 1);
+        if (stuckAtEnd) hole = buffer.buffered.start(i + 1) + 0.02;
+      }
+      if (hole >= 0) {
+        video.currentTime = hole;
+      } else if (video.currentTime < start || lag > 2.5) {
         video.currentTime = Math.max(start, end - 0.25);
       } else if (lag > 0.8) {
         video.playbackRate = 1.25;
