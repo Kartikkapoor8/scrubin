@@ -1283,3 +1283,116 @@ body {
 .help { width: min(calc(var(--u) * 104), 92vw); z-index: 60; background: rgba(var(--ink-rgb), 0.94); }
 .help__row { font-size: calc(var(--u) * 1.4); }
 .help__keys { min-width: calc(var(--u) * 7.5); font-size: calc(var(--u) * 1.2); }
+
+/* ---------- Arm mode (key M, ?mode=arm): the backup demo on a bare forearm ---------- */
+
+/* Between the picture and the HUD: a soft shadow under the hologram, the hologram (WebGL, composited as
+   light so its bloom spreads freely over the picture), and crisp labels on top. */
+.arm-canvas,
+.arm-gl {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: none;
+}
+.arm-gl { mix-blend-mode: screen; }
+.stage--arm .arm-canvas,
+.stage--arm .arm-gl { display: block; }
+
+/* The table demo's panels and overlays step aside. Captions, chips, brand and the corner label stay. */
+.stage--arm .stage__overlay,
+.stage--arm .steps,
+.stage--arm .vitals,
+.stage--arm .score,
+.stage--arm .toast,
+.stage--arm .title-card,
+.stage--arm .attract { display: none !important; }
+
+/* Idle: a calm, branded invitation. */
+.arm-idle {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(70% 60% at 50% 50%, rgba(var(--ink-rgb), 0.5) 0%, rgba(var(--ink-rgb), 0.28) 70%, rgba(var(--ink-rgb), 0) 100%);
+  opacity: 0;
+  transition: opacity 260ms ease;
+  pointer-events: none;
+}
+.stage:not(.stage--arm) .arm-idle { display: none; }
+.arm-idle--on { opacity: 1; transition: opacity 1100ms ease; }
+.arm-idle__box {
+  text-align: center;
+  transform: translateY(calc(var(--u) * 1.2)) scale(0.985);
+  transition: transform 1300ms var(--ease-out);
+}
+.arm-idle--on .arm-idle__box { transform: none; }
+.arm-idle__glyph {
+  width: calc(var(--u) * 30);
+  height: calc(var(--u) * 11.25);
+  overflow: visible;
+  filter: drop-shadow(0 0 calc(var(--u) * 0.6) rgba(var(--cyan-rgb), 0.7));
+}
+.arm-idle__arm {
+  fill: rgba(var(--cyan-rgb), 0.07);
+  stroke: var(--cyan);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  opacity: 0.85;
+}
+.arm-idle__ring {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 1.2;
+  opacity: 0;
+  animation: arm-idle-ring 4.8s var(--ease-out) infinite;
+}
+.arm-idle__ring:nth-of-type(2) { animation-delay: 0.12s; }
+.arm-idle__ring:nth-of-type(3) { animation-delay: 0.24s; }
+.arm-idle__ring:nth-of-type(4) { animation-delay: 0.36s; }
+.arm-idle__ring:nth-of-type(5) { animation-delay: 0.48s; }
+@keyframes arm-idle-ring {
+  0%, 18% { opacity: 0; }
+  30%, 70% { opacity: 0.9; }
+  85%, 100% { opacity: 0; }
+}
+.arm-idle__scan {
+  stroke: #fff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  animation: arm-idle-scan 4.8s ease-in-out infinite;
+}
+@keyframes arm-idle-scan {
+  0%, 30% { transform: translateX(0); opacity: 0; }
+  36% { opacity: 1; }
+  64% { opacity: 1; }
+  70%, 100% { transform: translateX(118px); opacity: 0; }
+}
+.arm-idle__title {
+  margin-top: calc(var(--u) * 2.4);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: calc(var(--u) * 8.4);
+  line-height: 1;
+  letter-spacing: 0.06em;
+  color: #fff;
+  text-shadow: 0 0 calc(var(--u) * 3) rgba(var(--cyan-rgb), 0.6), 0 0 calc(var(--u) * 0.7) rgba(var(--cyan-rgb), 0.8);
+  animation: attract-breathe 4.2s ease-in-out infinite;
+}
+.arm-idle__rule {
+  width: calc(var(--u) * 42);
+  height: 1px;
+  margin: calc(var(--u) * 2.2) auto;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  box-shadow: 0 0 calc(var(--u) * 1) rgba(var(--cyan-rgb), 0.9);
+}
+.arm-idle__sub {
+  font-family: var(--font-mono);
+  font-size: calc(var(--u) * 2.5);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text);
+}

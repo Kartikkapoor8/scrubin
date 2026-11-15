@@ -19,6 +19,8 @@
     "@fontsource-variable/space-grotesk": "^5.0.0",
     "@google/genai": "^3.3.0",
     "@mediapipe/tasks-vision": "^1.2.3",
+    "@types/three": "^0.187.0",
+    "three": "^0.187.0",
     "ws": "^8.23.0"
   },
   "devDependencies": {

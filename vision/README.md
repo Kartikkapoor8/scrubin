@@ -169,7 +169,8 @@ the detail. Tell the Mac agent which level it settled on (`__viper.brain` in the
 | `Shift` + `G` / `V` / `L` | Attending on or off / its voice on or off / send it the current picture |
 | `1` `2` `3` `4` | Input: HoloLens / webcam / video file / simulated arm |
 | `C` / `Shift` + `C` | Record the raw HoloLens stream to `vision/media/` (press again to stop) / record exactly 60 s |
-| `K` / `M` / `J` | Pick the marker colour by clicking it / step through colour presets / ignore holograms on or off |
+| `K` / `Shift` + `M` / `J` | Pick the marker colour by clicking it / step through colour presets / ignore holograms on or off |
+| `M` | Arm mode on / off (the backup demo, below) |
 | `D` | Debug view of the tracker |
 | `Y` | Sync clock, for measuring how far the headset's picture trails real life |
 | `-` / `=` | Suture trigger delay, down / up 0.1 s (HoloLens input only; remembered) |
@@ -258,6 +259,21 @@ the tracker.
 
 If something goes wrong mid-demo: `R` resets the procedure, `H` shows the clean picture, and reloading the
 page takes about two seconds (settings are kept).
+
+## Arm mode (backup demo, off by default; parked)
+
+`M`, or `?mode=arm` in the address, swaps the procedure for a demo that needs nothing but a bare forearm in
+front of the HoloLens or the webcam: a holographic exoskeleton (three.js with bloom) assembles round the
+forearm, holds while it is tracked and flies apart when it leaves. Detection: MediaPipe hand landmarks for the
+wrist, the multiclass selfie segmenter's body-skin mask (fused with skin colour, because the model often calls
+a lone forearm "clothes"), a principal-axis fit for direction and width, One Euro filters and enter/exit
+hysteresis (0.4 s / 1 s). Scale assumes a 65 mm mid-forearm. `D` shows the mask and the fit.
+
+Built to milestone 1 of 3 (detection and exoskeleton) and then parked on 2026-11-14 when the headset stream
+came good; the cut detection, suture plan and Gemini walkthrough were not built. The code is in `src/arm/`,
+loaded only when the mode is first switched on. `node dev/make-arm-clip.mjs --forearm <photo> --hand <png>`
+renders a test clip (an arm enters, holds, gets red marker cuts, leaves) to feed in as a fake webcam:
+`node dev/shot.mjs --camera dev/media/arm-clip.mjpeg --url "http://localhost:4747/?input=webcam&mode=arm"`.
 
 ## Layout of the code
 

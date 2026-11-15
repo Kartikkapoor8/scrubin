@@ -4,6 +4,7 @@ import '@fontsource-variable/jetbrains-mono/index.css';
 import './styles.css';
 
 import { loadSettings, saveSettings, type Scene } from './app/scene';
+import { ArmMode } from './arm/mode';
 import { add, clamp, el } from './core/dom';
 import { Viewport } from './core/viewport';
 import { InputManager } from './input/manager';
@@ -66,8 +67,9 @@ const KEYS: Array<[string, string]> = [
   ['L', 'Send the attending the current picture'],
   ['1 2 3 4', 'Input: HoloLens / webcam / video file / simulated arm'],
   ['C', 'Record the raw HoloLens stream to vision/media (C again stops; Shift+C records 60 s)'],
+  ['M', 'Arm mode on / off: the backup demo on a bare forearm (also ?mode=arm)'],
   ['K', 'Pick the marker colour: press K, then click the marker line'],
-  ['M', 'Next marker colour preset (green, magenta, blue, orange)'],
+  ['Shift M', 'Next marker colour preset (green, magenta, blue, orange)'],
   ['J', 'Ink only (default) / also track a glowing hologram line as the wound'],
   ['X  Z', 'Flip which end is suture 1 / which side is the far side'],
   ['[  ]', 'Squash or stretch overlays across the arm (camera angle)'],
@@ -153,6 +155,8 @@ async function boot(): Promise<void> {
   add(syncClock, el('div', 'sync-clock__note', 'Point the headset at this screen. The clock in its picture is behind this one by the lag. Set it with - and =, then Y.'));
   const sounds = new Sounds();
   if (params.get('sound') === '0') sounds.muted = true;
+  // Arm mode: the backup demo on a bare forearm (key M, ?mode=arm). Its canvases sit between the picture and the HUD.
+  const arm = new ArmMode(stage, hud, scene, view, hands, sounds);
 
   procedure.on((event) => {
     if (event.type === 'step') {
@@ -285,6 +289,7 @@ async function boot(): Promise<void> {
     waiting.clear();
     procedure.setAutoplay(false);
     procedure.reset();
+    arm.reset();
     brain.silence();
     attending.hide();
     view.release();
@@ -297,7 +302,8 @@ async function boot(): Promise<void> {
     /** The one button: the next suture if there is one to place, otherwise the next step; after the score, start over. */
     next: () => {
       touch();
-      if (procedure.step.id === 'complete') resetNow();
+      if (arm.active) arm.next();
+      else if (procedure.step.id === 'complete') resetNow();
       else if (placesSuture()) afterLag(() => procedure.advance());
       else if (waiting.size === 0) procedure.advance();
     },
@@ -305,7 +311,7 @@ async function boot(): Promise<void> {
       touch();
       if (placesSuture()) afterLag(() => procedure.startStitch());
     },
-    back: () => { touch(); procedure.back(); },
+    back: () => { touch(); if (arm.active) arm.back(); else procedure.back(); },
     reset: resetNow,
     /** Talk button down / up. */
     talk: (down: boolean) => {
@@ -414,6 +420,8 @@ async function boot(): Promise<void> {
     if (event.repeat) { event.preventDefault(); return; }
     sounds.unlock();
     touch();
+    // Keys that only mean something to the table demo (sutures, autoplay, marker colour, flips, zoom) do nothing in Arm mode.
+    if (arm.active && 'sSaAkKjJxXzZ[]tT'.includes(event.key)) { event.preventDefault(); return; }
     switch (event.key) {
       // Space, and a presenter's forward button (PageDown, or the right arrow on some), are the one button:
       // the next suture if there is one to place, otherwise the next step. Shift + right arrow skips ahead.
@@ -451,6 +459,13 @@ async function boot(): Promise<void> {
       case 'c': case 'C': void recording.toggle(event.shiftKey ? 60 : 0); break;
       case 'k': case 'K': setPicking(!picking); break;
       case 'm': case 'M': {
+        if (!event.shiftKey) {
+          // Arm mode on or off. Either way the screen starts clean.
+          resetNow();
+          arm.toggle();
+          hud.notice(arm.active ? 'Arm mode: show a forearm' : 'Table mode', 1800);
+          break;
+        }
         preset = (preset + 1) % presets.length;
         scene.marker = { ...MARKER_PRESETS[presets[preset]], lengthMm: scene.marker.lengthMm };
         saveMarker(scene.marker);
@@ -490,8 +505,9 @@ async function boot(): Promise<void> {
     if (event.key === 'g' || event.key === 'G' || event.key === 'b' || event.key === 'B' || event.key === '.') actions.talk(false);
   });
 
+  if (params.get('mode') === 'arm') arm.setActive(true);
   const startStep = params.get('step') as StepId | null;
-  if (startStep) procedure.goToId(startStep);
+  if (startStep && !arm.active) procedure.goToId(startStep);
   if (params.get('autoplay') === '1') procedure.setAutoplay(true);
 
   // ----- Tracking: once per video frame -----
@@ -499,8 +515,10 @@ async function boot(): Promise<void> {
   const analyze = (now: number) => {
     const dt = lastAnalysis ? Math.min(0.25, (now - lastAnalysis) / 1000) : 1 / 30;
     lastAnalysis = now;
-    tracker.update(detector.analyze(video, scene.marker, tracker.hint), scene.marker, dt);
+    // Hands first: Arm mode anchors the forearm to the wrist they find in this same frame.
     hands.detect(video, now);
+    if (arm.active) arm.analyze(video, now);
+    else tracker.update(detector.analyze(video, scene.marker, tracker.hint), scene.marker, dt);
   };
   const frameCallbacks = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
   if (frameCallbacks) {
@@ -536,6 +554,7 @@ async function boot(): Promise<void> {
     attending: () => ({ state: brain.state, detail: brain.detail, voice: brain.voice, highlight: scene.highlight.structure }),
     view: () => ({ zoom: +view.zoom.toFixed(2), fit: view.fit }),
     marker: () => scene.marker,
+    arm: () => arm.debugInfo(),
     fps: () => ({ fps: +fps.toFixed(1), worstFrameMs: +worstFrame.toFixed(1) }),
   };
   (window as unknown as { __viper: unknown }).__viper = {
@@ -543,6 +562,7 @@ async function boot(): Promise<void> {
     debug: () => Object.fromEntries(Object.entries(debug).map(([name, read]) => [name, read()])),
     scene,
     brain,
+    arm,
     /** Ask the attending a typed question (needs the Gemini session to be on: press G first). */
     ask: (text: string) => brain.ask(text),
     captureView: () => brainHost.captureView(),
@@ -589,7 +609,7 @@ async function boot(): Promise<void> {
     const quiet = (now - lastActivity) / 1000;
     const busyTalking = brain.state === 'hearing' || brain.state === 'thinking' || brain.state === 'answering';
     if (busyTalking) lastActivity = now;
-    const showAttract = attractAfter > 0 && !scene.hidden && !procedure.autoplay && !busyTalking
+    const showAttract = attractAfter > 0 && !scene.hidden && !procedure.autoplay && !busyTalking && !arm.active
       && procedure.step.id === 'standby' && quiet > attractAfter;
     attract.set(showAttract);
     scene.attract = showAttract;
@@ -648,7 +668,8 @@ async function boot(): Promise<void> {
     }
 
     renderer.resize(stage.clientWidth, stage.clientHeight);
-    renderer.draw(t, dt, view);
+    if (arm.active) arm.draw(t, dt);
+    else renderer.draw(t, dt, view);
     vitals.update(t, dt);
     stage.classList.toggle('stage--idle', now - lastPointer > 2500 && !picking);
 
@@ -656,6 +677,7 @@ async function boot(): Promise<void> {
     wasLocked = pose.locked;
 
     // Status chips.
+    woundChip.show(!arm.active);
     if (pose.locked) woundChip.set('Wound locked', 'ok');
     else if (tracker.hasEverLocked && pose.confidence > 0.05) woundChip.set('Wound held', 'busy');
     else woundChip.set('Searching for wound', 'busy');
