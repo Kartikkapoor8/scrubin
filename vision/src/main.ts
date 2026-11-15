@@ -377,7 +377,9 @@ async function boot(): Promise<void> {
       clipPlaying = config.clips[0];
       input.useFile(`/media/${encodeURIComponent(config.clips[0])}`);
     } else if (input.hasFile) input.choose('file');
-    else picker.click();
+    // No clip recorded yet: never pop a file dialog over the full-screen demo. (A file dropped on the window
+    // still plays.)
+    else hud.notice('No recorded clip yet: Shift+C records one from the headset. Key 4 is the simulated arm.', 4500);
   };
 
   const wanted = params.get('input') as SourceKind | null;
@@ -464,7 +466,8 @@ async function boot(): Promise<void> {
       case 'y': case 'Y':
         if (event.shiftKey) { void latencySweep(); break; }
         syncClock.classList.toggle('sync-clock--on');
-        if (syncClock.classList.contains('sync-clock--on')) probe.start(); else if (!sweeping) probe.stop();
+        if (syncClock.classList.contains('sync-clock--on')) probe.start();
+        else if (!sweeping) { probe.stop(); sweepText = ''; }
         break;
       case 'q': case 'Q': {
         const next = QUALITIES[(QUALITIES.indexOf(input.quality) + 1) % QUALITIES.length];
@@ -598,6 +601,8 @@ async function boot(): Promise<void> {
    */
   const latencySweep = async () => {
     if (sweeping) return;
+    // Settings may have been added since the page loaded: ask the server again before refusing.
+    if (!config.hololens.configured) config.hololens = (await loadConfig()).hololens;
     if (!config.hololens.configured) { hud.notice('The latency sweep needs the headset: add its settings to vision/.env.local', 5000); return; }
     sweeping = true;
     syncClock.classList.add('sync-clock--on');
@@ -647,7 +652,7 @@ async function boot(): Promise<void> {
     (window as unknown as { __latency: unknown }).__latency = { results, pick };
     hud.notice(clean.length ? `Latency sweep: kept live_${pick} (${((clean.find((r) => r.quality === pick)?.delayMs ?? 0) / 1000).toFixed(2)} s)` : 'Latency sweep: nothing measured', 6000);
     sweeping = false;
-    window.setTimeout(() => { if (!sweeping) sweepText = ''; }, 30000);
+    // The results stay on the clock until it is closed with Y.
   };
 
   const frameCallbacks = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
@@ -760,7 +765,7 @@ async function boot(): Promise<void> {
     const busyTalking = brain.state === 'hearing' || brain.state === 'thinking' || brain.state === 'answering' || brain.speaking;
     if (busyTalking) lastActivity = now;
     const showAttract = attractAfter > 0 && !scene.hidden && !procedure.autoplay && !busyTalking && !arm.active
-      && procedure.step.id === 'standby' && quiet > attractAfter;
+      && !syncClock.classList.contains('sync-clock--on') && procedure.step.id === 'standby' && quiet > attractAfter;
     attract.set(showAttract);
     scene.attract = showAttract;
     const resetAfter = procedure.step.id === 'complete' ? resetAfterDone : resetAfterIdle;
