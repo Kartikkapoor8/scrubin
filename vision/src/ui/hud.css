@@ -17,8 +17,8 @@
   /* One type scale for everything on the HUD. */
   --t-xs: calc(var(--u) * 1.6);   /* small capitals inside a panel: kickers, counters' names */
   --t-sm: calc(var(--u) * 2.05);  /* capitals that must carry across a room: context, keys, states */
-  --t-md: calc(var(--u) * 2.6);   /* body: instructions, questions, comments */
-  --t-lg: calc(var(--u) * 2.9);   /* body, emphasised: answers, the idle points */
+  --t-md: calc(var(--u) * 2.8);   /* body: instructions, questions, comments */
+  --t-lg: calc(var(--u) * 3);     /* body, emphasised: answers, the idle points */
   --t-xl: calc(var(--u) * 3.7);   /* card titles */
   --t-2xl: calc(var(--u) * 4.4);  /* big numbers, the pitch */
 }
@@ -40,7 +40,8 @@
 .brand__sub { letter-spacing: 0.12em; font-weight: 500; }
 .corner-label { letter-spacing: 0.16em; font-weight: 600; }
 .chip { letter-spacing: 0.08em; font-weight: 600; }
-.banner { letter-spacing: 0.06em; font-weight: 600; }
+/* Notices are sentences, said calmly: no capitals. */
+.banner { letter-spacing: 0.01em; font-weight: 600; text-transform: none; font-size: calc(var(--u) * 1.6); }
 
 /* ---------- Glass: every panel ---------- */
 
@@ -430,8 +431,8 @@
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.66);
-  text-shadow: 0 0 calc(var(--u) * 0.9) rgba(var(--ink-rgb), 0.95), 0 0 calc(var(--u) * 0.3) rgba(var(--ink-rgb), 0.9);
+  color: rgba(255, 255, 255, 0.84);
+  text-shadow: 0 0 calc(var(--u) * 1) rgba(var(--ink-rgb), 1), 0 0 calc(var(--u) * 0.4) rgba(var(--ink-rgb), 1), 0 1px 2px rgba(var(--ink-rgb), 0.9);
   transition: color 380ms ease;
 }
 .rail__item[data-state='done'] .rail__label { color: rgba(var(--green-rgb), 0.86); }

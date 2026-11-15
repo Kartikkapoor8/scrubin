@@ -25,6 +25,7 @@ export class AttractScreen {
     this.lines.push(add(box, el('div', 'idle__pitch', PROCEDURE.idle.pitch)));
     const points = add(box, el('div', 'idle__points'));
     for (const point of PROCEDURE.idle.points) this.points.push(add(points, el('span', 'idle__point', point)));
+    this.setGemini(false);
     const cta = add(box, el('div', 'idle__cta'));
     add(cta, el('span', 'idle__dot'));
     add(cta, el('span', '', PROCEDURE.idle.cta));
@@ -33,6 +34,13 @@ export class AttractScreen {
 
   get showing(): boolean {
     return this.on;
+  }
+
+  /** The point about asking Gemini is only made while there is a Gemini session to ask. */
+  setGemini(available: boolean): void {
+    for (const point of this.points) {
+      if (/gemini/i.test(point.textContent || '')) point.style.display = available ? '' : 'none';
+    }
   }
 
   set(on: boolean): void {

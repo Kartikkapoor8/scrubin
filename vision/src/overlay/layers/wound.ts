@@ -33,7 +33,11 @@ export class WoundLockLayer implements Layer {
     this.searching += ((searching ? 1 : 0) - this.searching) * (1 - Math.exp(-(searching ? 1.2 : 6) * dt));
     if (this.searching > 0.01) {
       const dots = '.'.repeat(1 + (Math.floor(t * 2) % 3));
-      text(ctx, `LOOKING FOR THE WOUND${dots.padEnd(3, ' ')}`, frame.width / 2, frame.height * 0.84, {
+      // With no picture yet the thing being waited for is the picture, not the wound.
+      const input = this.scene.input;
+      const waiting = input.live ? 'LOOKING FOR THE WOUND'
+        : input.label === 'HoloLens' ? 'CONNECTING TO THE HEADSET' : 'WAITING FOR THE PICTURE';
+      text(ctx, `${waiting}${dots.padEnd(3, ' ')}`, frame.width / 2, frame.height * 0.84, {
         size: 16, color: C.cyan, alpha: this.searching * (0.7 + 0.25 * Math.sin(t * 2.4)), font: 'body', tracking: 0.2, weight: 700, plate: 1,
       });
     }

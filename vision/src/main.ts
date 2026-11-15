@@ -130,6 +130,7 @@ async function boot(): Promise<void> {
     aligned: false,
     toolDistanceMm: -1,
     attract: false,
+    input: { live: false, label: '' },
     relockAt: -1e9,
     keepOut: [],
     highlight: { structure: '', until: 0 },
@@ -244,10 +245,12 @@ async function boot(): Promise<void> {
   const brainChip = hud.addChip('Gemini off');
   const brain = new AttendingBrain(brainHost, attending, (state, detail) => {
     // The panel is on screen while the session is up, and simply absent when it is not.
-    attending.setOnline(state !== 'off' && state !== 'error' && state !== 'connecting');
+    const online = state !== 'off' && state !== 'error' && state !== 'connecting';
+    attending.setOnline(online);
+    attract.setGemini(online);
     if (state === 'error') {
       brainChip.set('Gemini offline', 'off');
-      if (detail) hud.notice(detail, 6000);
+      if (detail) hud.notice(detail, 2600);
     } else if (state === 'off') brainChip.set('Gemini off', 'off');
     else if (state === 'connecting') brainChip.set(brain.offline ? 'Gemini offline' : 'Gemini connecting', brain.offline ? 'off' : 'busy');
     else if (state === 'listening') brainChip.set('Gemini ready', 'ok');
@@ -261,6 +264,7 @@ async function boot(): Promise<void> {
   // For recordings and screenshots with no Gemini session: show the panel as it looks when one is up.
   if (params.get('panel') === '1') {
     attending.setOnline(true);
+    attract.setGemini(true);
     brainChip.set('Gemini ready', 'ok');
   }
   procedure.on((event) => {
@@ -359,6 +363,7 @@ async function boot(): Promise<void> {
   const input = new InputManager(video, { hololens: config.hololens.configured }, (snapshot) => {
     hud.setInput(snapshot);
     stage.classList.toggle('stage--stale', snapshot.status.state !== 'live');
+    scene.input = { live: snapshot.status.state === 'live', label: snapshot.label };
   });
 
   const picker = el('input');

@@ -52,7 +52,7 @@ export class StitchLayer implements Layer {
       const along = sutureOffsetMm(i);
       const since = this.doneAt[i] === undefined ? 10 : t - this.doneAt[i];
       // Beside the suture's number on the near side: the far side belongs to the danger zone.
-      const [kx, ky] = w.point(along + 3.7, -(biteMm + 4.6));
+      const [kx, ky] = w.point(along + 4, -(biteMm + 4.6));
       check(ctx, kx, ky, clamp(1.9 * px, 8, 14), C.green, conf, ease.outCubic(progress(since, 0.1, 0.4)));
       if (since < 0.9) this.burst(frame, w, along, since / 0.9, conf);
       if (i > 0 && step === 'stitch') this.spacing(frame, w, i, since, conf);

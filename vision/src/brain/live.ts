@@ -430,7 +430,9 @@ export class AttendingBrain {
           this.wanted = false;
           this.mic.stop();
           this.wake.stop(); // nothing to wake: do not leave the browser's recogniser listening
-          this.setState('error', 'Gemini is not set up: add GEMINI_API_KEY to vision/.env.local (no restart needed), then press G');
+          // What to do about it is for the operator, in the console (and docs/MORNING.md), not for the audience.
+          console.info('[attending] Gemini is not set up: add GEMINI_API_KEY to vision/.env.local (no restart needed), then press G');
+          this.setState('error', 'Gemini is off');
           return;
         }
         throw new Error(body.detail || `token request failed (${res.status})`);

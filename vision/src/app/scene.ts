@@ -59,6 +59,8 @@ export interface Scene {
   toolDistanceMm: number;
   /** The idle screen is up: layers keep the picture quiet behind it. */
   attract: boolean;
+  /** Whether a picture is arriving, and the name of where it comes from ("HoloLens", "Webcam"...). */
+  input: { live: boolean; label: string };
   /** App time at which the wound-lock brackets should snap in again (set by the scan as it passes the wound). */
   relockAt: number;
   /**
