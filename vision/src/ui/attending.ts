@@ -410,7 +410,7 @@ export class AttendingCard {
     this.answer.classList.toggle('gem__a--typing', this.count < this.full.length || this.open);
     if (this.full === '') {
       this.answer.style.maxHeight = '';
-      this.answer.classList.remove('gem__a--scrolled');
+      this.answer.classList.remove('gem__a--scrolled', 'gem__a--cut');
       return;
     }
     // The whole answer is laid out from the start (the part not yet typed is there, unseen), so words never
@@ -422,8 +422,11 @@ export class AttendingCard {
     const finished = this.count >= this.full.length && !this.open;
     const room = Math.min(written, line * (finished ? 10 : 6));
     this.answer.style.maxHeight = `${Math.ceil(room)}px`;
-    const top = Math.max(0, Math.min(this.answer.scrollHeight - room, written - room));
+    // Still longer than that at rest: it goes back to its first line, and the end fades out.
+    const cut = finished && this.answer.scrollHeight > room + 2;
+    const top = cut ? 0 : Math.max(0, Math.min(this.answer.scrollHeight - room, written - room));
     this.answer.scrollTop = top;
     this.answer.classList.toggle('gem__a--scrolled', top > 2);
+    this.answer.classList.toggle('gem__a--cut', cut);
   }
 }

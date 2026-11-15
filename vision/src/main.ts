@@ -145,7 +145,7 @@ async function boot(): Promise<void> {
   renderer.add(new HandLayer(scene));
   renderer.add(new DebugLayer(scene));
 
-  new StepPanel(hud.root, procedure);
+  const rail = new StepPanel(hud.root, procedure);
   // Table mode: lines and lettering on the picture are drawn larger, to carry to someone two metres away.
   if (params.get('big') !== '0') setReadability(1.45, 1.7);
 
@@ -740,7 +740,7 @@ async function boot(): Promise<void> {
     const total = procedure.steps.length - 1;
     const id = procedure.step.id;
     if (arm.active) return 'Arm mode';
-    if (id === 'standby') return tracker.pose.locked ? 'Wound locked' : 'Finding the wound';
+    if (id === 'standby') return `${total} steps \u00B7 ${procedure.count} sutures`;
     const where = `Step ${procedure.index} of ${total}`;
     if (id === 'stitch') return `${where} \u00B7 Suture ${Math.min(procedure.count, procedure.stitchesDone + 1)} of ${procedure.count}`;
     if (id === 'complete') return `${where} \u00B7 ${procedure.step.label}`;
@@ -843,10 +843,12 @@ async function boot(): Promise<void> {
 
     if (pose.locked && !wasLocked && step === 'standby') sounds.lock();
     wasLocked = pose.locked;
+    rail.setLocked(pose.locked);
 
     // Status chips.
     woundChip.show(!arm.active);
-    if (pose.locked) woundChip.set('Wound locked', 'ok');
+    if (!scene.input.live) woundChip.set('Wound', 'off'); // no picture yet: nothing to search
+    else if (pose.locked) woundChip.set('Wound locked', 'ok');
     else if (tracker.hasEverLocked && pose.confidence > 0.05) woundChip.set('Wound held', 'busy');
     else woundChip.set('Searching for wound', 'busy');
 

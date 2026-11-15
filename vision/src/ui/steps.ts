@@ -24,6 +24,7 @@ export class StepPanel {
   private sutures: HTMLDivElement;
   private pips: HTMLSpanElement[] = [];
   private count: HTMLSpanElement;
+  private locked = false;
 
   constructor(parent: HTMLElement, private procedure: Procedure) {
     this.root = add(parent, el('div', 'rail'));
@@ -102,6 +103,13 @@ export class StepPanel {
     if (!animate) return;
     enter(item.parts, { y: 12, each: 0.07, delay: 0.1 });
     sweep(item.inner);
+  }
+
+  /** Standing by: the card asks for the wound until it has been found, then for Next. */
+  setLocked(locked: boolean): void {
+    if (locked === this.locked) return;
+    this.locked = locked;
+    this.ready.parts[2].textContent = locked ? PROCEDURE.readyLocked : this.procedure.steps[0].line;
   }
 
   private showSutures(): void {

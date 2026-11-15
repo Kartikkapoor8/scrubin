@@ -14,6 +14,8 @@ import { WoundSpace } from '../space';
 export class PlanLayer implements Layer {
   private presence = new Appear(3, 5);
   private ruler = new Appear(3, 6);
+  /** Which end of the row the bite dimension is drawn at: -1 beside the first suture, 1 beside the last. */
+  private biteEnd = -1;
 
   constructor(private scene: Scene) {}
 
@@ -113,24 +115,32 @@ export class PlanLayer implements Layer {
       const [lx, ly] = w.point((first + sutureOffsetMm(1)) / 2, across - 4.2);
       quantity(ctx, String(spacingMm), 'mm', lx, ly, { size: clamp(2.8 * px, 14, 19), alpha: labelAlpha });
 
-      // Bite: how far from the wound edge the needle goes in, shown once, beside the first suture.
-      const biteAlong = first - 4.4;
+      // Bite: how far from the wound edge the needle goes in, shown once, beside the first suture; beside
+      // the last one instead when a HUD panel is close to that end.
+      const biteSize = clamp(2.8 * px, 14, 19);
+      const wide = quantity(ctx, String(biteMm), 'mm', -9999, -9999, { size: biteSize, alpha: 0 });
+      const spot = (end: number) => {
+        const at = (end < 0 ? first : last) + end * 4.4;
+        const [x0, y0] = w.point(at + end * 1.6, -biteMm / 2);
+        const away = wide / 2 + 6;
+        return { at, x: x0 + end * Math.cos(w.angle) * away, y: y0 + end * Math.sin(w.angle) * away };
+      };
+      const crowded = (x: number, y: number) => this.scene.keepOut.some((zone) => x + wide / 2 > zone.x0 - 48 && x - wide / 2 < zone.x1 + 48 && y > zone.y0 - 48 && y < zone.y1 + 48);
+      let here = spot(this.biteEnd);
+      if (crowded(here.x, here.y)) {
+        const other = spot(-this.biteEnd);
+        if (!crowded(other.x, other.y)) { this.biteEnd = -this.biteEnd; here = other; }
+      }
       const biteDraw = this.ruler.part(t, 1.3, 0.5);
-      glow(ctx, polyline(w.points([[biteAlong, 0], [biteAlong, -biteMm]])), C.cyan, {
+      glow(ctx, polyline(w.points([[here.at, 0], [here.at, -biteMm]])), C.cyan, {
         width: 1.1, alpha: rulerOn * 0.85 * biteDraw, bloom: 0.5,
       });
       for (const c of [0, -biteMm]) {
-        glow(ctx, polyline(w.points([[biteAlong - 1.1, c], [biteAlong + 1.1, c]])), C.cyan, {
+        glow(ctx, polyline(w.points([[here.at - 1.1, c], [here.at + 1.1, c]])), C.cyan, {
           width: 1.1, alpha: rulerOn * biteDraw, bloom: 0.5,
         });
       }
-      // Clear of its own bracket: the label's right edge stops short of it.
-      const biteSize = clamp(2.8 * px, 14, 19);
-      const biteAlpha = rulerOn * this.ruler.part(t, 1.6, 0.5);
-      const [bx0, by0] = w.point(biteAlong - 1.6, -biteMm / 2);
-      const wide = quantity(ctx, String(biteMm), 'mm', -9999, -9999, { size: biteSize, alpha: 0 });
-      const away = wide / 2 + 6;
-      quantity(ctx, String(biteMm), 'mm', bx0 - Math.cos(w.angle) * away, by0 - Math.sin(w.angle) * away, { size: biteSize, alpha: biteAlpha });
+      quantity(ctx, String(biteMm), 'mm', here.x, here.y, { size: biteSize, alpha: rulerOn * this.ruler.part(t, 1.6, 0.5) });
     }
   }
 }

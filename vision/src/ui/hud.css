@@ -225,6 +225,13 @@
   scroll-behavior: smooth;
 }
 .gem__a--scrolled { mask-image: linear-gradient(180deg, transparent 0, #000 calc(var(--t-lg) * 1.1)); }
+/* At rest an answer too long to show whole starts at its first line and fades out at the end. */
+.gem__a--cut { mask-image: linear-gradient(180deg, #000 calc(100% - var(--t-lg) * 1.7), transparent 100%); }
+/* A rule between the question and its answer, so the two never read as one paragraph. */
+.gem__inner:has(.gem__a--on) .gem__q--on {
+  padding-bottom: calc(var(--u) * 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.11);
+}
 /* The question gives way to a long answer. */
 .gem__q {
   display: -webkit-box;
@@ -739,14 +746,14 @@
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--green);
+  color: var(--cyan);
 }
 .idle__dot {
   width: calc(var(--u) * 1.5);
   height: calc(var(--u) * 1.5);
   border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 calc(var(--u) * 1.6) rgba(var(--green-rgb), 0.95);
+  background: var(--cyan);
+  box-shadow: 0 0 calc(var(--u) * 1.6) rgba(var(--cyan-rgb), 0.95);
   animation: gem-pulse 1400ms ease-in-out infinite;
 }
 
@@ -776,3 +783,13 @@
 .stage--clean .help,
 .stage--clean .sync-clock,
 .stage--clean .latency-patch { display: none !important; }
+
+/* No word left alone on a last line; titles break evenly. */
+.rail__line,
+.gem__q,
+.gem__a,
+.gem__hint,
+.fb__line { text-wrap: pretty; }
+.rail__title,
+.debrief__title,
+.idle__pitch { text-wrap: balance; }

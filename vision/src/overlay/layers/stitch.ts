@@ -151,11 +151,12 @@ export class StitchLayer implements Layer {
       glow(ctx, polyline(w.points([[end, across - 1.2], [end, across + 1.2]])), C.green, { width: 1.2, alpha: conf * drawn, bloom: 0.5 });
     }
     const counted = measured * ease.outQuart(progress(since, 0.25, 0.7));
-    const [tx, ty] = w.point((from + to) / 2, across - 3.6);
-    const size = clamp(1.7 * px, 10, 13);
-    // With its unit when two of these fit side by side; the number alone when they would touch.
+    const size = clamp(2 * px, 11, 15);
+    // Alternate read-outs sit on a second row, so each has two gaps' width and room for its unit.
     const full = quantity(ctx, measured.toFixed(1), 'mm', -9999, -9999, { size, alpha: 0 });
-    quantity(ctx, counted.toFixed(1), 'mm', tx, ty, { size, color: C.green, alpha: conf * drawn, bare: full + 8 > spacingMm * px });
+    const lower = index % 2 === 0 ? 4.6 : 0;
+    const [tx, ty] = w.point((from + to) / 2, across - 3.9 - lower);
+    quantity(ctx, counted.toFixed(1), 'mm', tx, ty, { size, color: C.green, alpha: conf * drawn, bare: full + 8 > spacingMm * px * 2 });
   }
 
   /** The moment a suture is confirmed: a ring and sparks thrown outward. */

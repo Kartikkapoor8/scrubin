@@ -140,6 +140,8 @@ export class AnatomyLayer implements Layer {
   private zone = new Appear(3, 4);
   private highlight = 0;
   private highlighted = '';
+  /** Presence of the window's corner marks (they step aside as a set when a panel covers one). */
+  private corners = 1;
   /** How far each label is currently pushed out from under a HUD panel (pixels), eased. */
   private nudges: Array<[number, number]> = STRUCTURES.map(() => [0, 0]);
 
@@ -265,16 +267,16 @@ export class AnatomyLayer implements Layer {
   private drawWindow(frame: Frame, w: WoundSpace, reachOut: number, alpha: number): void {
     if (alpha <= 0.01) return;
     const leg = 4;
-    for (const [sa, sc] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as Array<[number, number]>) {
-      const points = w.points([
-        [sa * (reachOut - leg), sc * BESIDE],
-        [sa * reachOut, sc * BESIDE],
-        [sa * reachOut, sc * (BESIDE - leg)],
-      ]);
-      // A corner that would sit under a HUD panel is left out rather than drawn half hidden.
-      if (this.scene.keepOut.some((zone) => points[2] > zone.x0 - 12 && points[2] < zone.x1 + 12 && points[3] > zone.y0 - 12 && points[3] < zone.y1 + 12)) continue;
-      glow(frame.ctx, polyline(points), C.cyan, { width: 1.2, alpha: alpha * 0.6, bloom: 0.5 });
-    }
+    const corners = ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as Array<[number, number]>).map(([sa, sc]) => w.points([
+      [sa * (reachOut - leg), sc * BESIDE],
+      [sa * reachOut, sc * BESIDE],
+      [sa * reachOut, sc * (BESIDE - leg)],
+    ]));
+    // All four or none: a frame with one corner under a HUD panel reads as broken.
+    const hidden = corners.some((points) => this.scene.keepOut.some((zone) => points[2] > zone.x0 - 12 && points[2] < zone.x1 + 12 && points[3] > zone.y0 - 12 && points[3] < zone.y1 + 12));
+    this.corners += ((hidden ? 0 : 1) - this.corners) * damp(6, frame.dt);
+    if (this.corners <= 0.01) return;
+    for (const points of corners) glow(frame.ctx, polyline(points), C.cyan, { width: 1.2, alpha: alpha * 0.6 * this.corners, bloom: 0.5 });
   }
 
   /**
@@ -305,9 +307,11 @@ export class AnatomyLayer implements Layer {
     const [movedX, movedY] = this.clearOfPanels(0, middleX, (top + bottom) / 2, widest / 2 + 6, (bottom - top) / 2, frame);
     const dx = movedX - middleX;
     const dy = movedY - (top + bottom) / 2;
+    // One left (or right) edge for the whole column, at the name that starts furthest out.
+    const edge = side > 0 ? Math.max(...tags.map((tag) => tag.x)) : Math.min(...tags.map((tag) => tag.x));
 
     for (const tag of tags) {
-      const startX = tag.x + dx;
+      const startX = edge + dx;
       const y = tag.y + dy;
       glow(ctx, polyline([tag.fromX, tag.fromY, startX, y]), tag.color, { width: 1, alpha: tag.alpha * 0.7, bloom: 0.3, halo: 0.4 });
       dot(ctx, tag.fromX, tag.fromY, 2.2, tag.color, tag.alpha);

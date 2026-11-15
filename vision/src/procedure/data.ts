@@ -27,6 +27,8 @@ export const PROCEDURE = {
     cta: 'Press Next to begin',
   },
   debrief: { kicker: 'Debrief', title: 'Wound closed', depth: 'In range' },
+  /** The Ready card's instruction once the wound has been found (before that it is the standby step's line). */
+  readyLocked: 'Wound found. Press Next to begin.',
   patient: { name: 'Training Patient 01', procedure: 'Laceration repair', site: 'R forearm' },
   vitals: { hr: 72, bp: '118/76', spo2: 98 },
   wound: { lengthMm: 42, label: 'Laceration' },
@@ -50,7 +52,7 @@ export const PROCEDURE = {
     { id: 'standby', short: 'RDY', label: 'Ready', title: 'Ready', line: 'Bring the wound into view, then press Next.', duration: 4 },
     { id: 'scan', short: 'SCN', label: 'Scan', title: 'Scanning the field', line: 'Welcome to VIPER. Hold still while I scan the field.', duration: 6 },
     { id: 'assess', short: 'ASM', label: 'Assess', title: 'Assess the wound', line: 'Training Patient 01. A 42 mm laceration on the right forearm. Linear, clean edges.', duration: 7 },
-    { id: 'anatomy', short: 'ANT', label: 'Anatomy', title: 'Know what is underneath', line: 'Check under the skin first. The radial artery runs beside this wound. Avoid the red zone.', duration: 9 },
+    { id: 'anatomy', short: 'ANT', label: 'Anatomy', title: 'Under the skin', line: 'Check under the skin first. The radial artery runs beside this wound. Avoid the red zone.', duration: 9 },
     { id: 'plan', short: 'PLN', label: 'Plan', title: 'Plan the repair', line: 'Five simple interrupted sutures. Bites 5 mm from the edge, 8 mm apart, needle in at 90°.', duration: 8 },
     { id: 'stitch', short: 'SUT', label: 'Suture', title: 'Place the sutures', line: 'Go ahead. Enter at the dot, follow the arc, and tie it down.', duration: 4 },
     { id: 'complete', short: 'END', label: 'Debrief', title: 'Procedure complete', line: 'Wound closed. Five for five, even spacing. Well done, doctor.', duration: 10 },
