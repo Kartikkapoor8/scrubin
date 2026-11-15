@@ -4,6 +4,7 @@
 //   node dev/drills.mjs                       all the quick drills (about 8 minutes)
 //   node dev/drills.mjs --only drop,reload    some of them: drop unreachable network gemini reload resets
 //   node dev/drills.mjs --soak 90             continuous runs for 90 minutes, sampling memory and CPU
+//   --app-port 4751 --mock-port 8473 --dist dist-soak   to run two at once
 //
 // It builds the app into dist-drills/ and serves that on its own ports (app 4749, fake headset 8453), so the
 // development server on 4747 and anyone editing the code are left alone. Screenshots and results go to
@@ -24,9 +25,10 @@ const arg = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`);
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 };
-const MOCK_PORT = 8453;
-const APP_PORT = 4749;
-const DIST = 'dist-drills';
+// Own ports and build folder, so a soak and the quick drills can run side by side (--app-port, --mock-port).
+const MOCK_PORT = Number(arg('mock-port', '8453'));
+const APP_PORT = Number(arg('app-port', '4749'));
+const DIST = arg('dist', 'dist-drills');
 const only = arg('only', '').split(',').filter(Boolean);
 const soakMinutes = Number(arg('soak', '0'));
 const wants = (name) => soakMinutes === 0 && (only.length === 0 || only.includes(name));
@@ -340,7 +342,7 @@ async function soak(minutes) {
   await appUp();
   const page = await open(DEMO);
   await runningDemo(page, 0);
-  const file = path.join(out, 'soak.jsonl');
+  const file = path.join(out, `soak-${APP_PORT}.jsonl`);
   fs.writeFileSync(file, '');
   // Chrome's main process is a child of this script (as are the two servers); its helpers are its children.
   const childPids = (pid) => {
@@ -431,6 +433,6 @@ try {
   await browser.close();
   cleanup();
 }
-const file = path.join(out, soakMinutes > 0 ? 'soak-results.json' : 'results.json');
+const file = path.join(out, soakMinutes > 0 ? `soak-results-${APP_PORT}.json` : 'results.json');
 fs.writeFileSync(file, JSON.stringify(results, null, 2));
 console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed. Details: ${file}`);
