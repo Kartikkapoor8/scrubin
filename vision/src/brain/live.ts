@@ -103,6 +103,7 @@ export class AttendingBrain {
   private talkTimer = 0;
   private answerTimer = 0;
   private pauseTimer = 0;
+  private userSpokeOrHeld = false;
   /** Tool calls were just answered: the spoken answer is still to come. */
   private toolsPending = false;
   private toolsTimer = 0;
@@ -280,6 +281,7 @@ export class AttendingBrain {
       this.setState(this.wanted && this.session ? 'listening' : 'off');
       return true;
     }
+    this.userSpokeOrHeld = true;
     this.card.setState('thinking');
     this.setState('thinking');
     // Nothing said, or nothing came back: do not sit on "thinking" for ever.
@@ -290,8 +292,19 @@ export class AttendingBrain {
         this.userSpoke = false;
         this.card.hide();
         this.setState(this.wanted && this.session ? 'listening' : 'off');
+        // A question that got nothing back means the session has gone quiet: open a fresh one now, so the
+        // next question is answered.
+        if (this.wanted && this.userSpokeOrHeld) {
+          console.warn('[attending] no answer in 7 s: reconnecting');
+          this.generation++;
+          const old = this.session;
+          this.session = null;
+          this.handle = '';
+          try { old?.close(); } catch { /* closed */ }
+          void this.connect();
+        }
       }
-    }, 9000);
+    }, 7000);
     return false;
   }
 
