@@ -96,7 +96,7 @@ export class ScanLayer implements Layer {
     // Readout, bottom centre.
     const percent = Math.round(clamp((p1 * 0.5 + p2 * 0.5) * 100, 0, 100));
     const done = percent >= 100;
-    const readY = height - Math.max(70, height * 0.11);
+    const readY = height - Math.max(96, height * 0.135);
     text(ctx, done ? 'FIELD MAPPED' : 'SCANNING FIELD', width / 2, readY, {
       size: 17, color: done ? C.green : C.cyan, alpha: presence, font: 'body', tracking: 0.22, weight: 700,
     });

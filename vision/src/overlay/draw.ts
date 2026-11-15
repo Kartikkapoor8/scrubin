@@ -184,6 +184,22 @@ export interface TextOptions {
   tracking?: number;
   /** Rotation in radians about the text's anchor. */
   rotate?: number;
+  /**
+   * A dark plate behind the letters, 0..1. Lettering that sits on the arm needs one: skin is too bright
+   * and too close to red, amber and cyan for a shadow alone to carry the words across a room.
+   */
+  plate?: number;
+}
+
+/** A dark rounded plate (for lettering on the picture). Coordinates are its edges. */
+export function plate(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, alpha = 1): void {
+  if (alpha <= 0.003) return;
+  ctx.save();
+  ctx.fillStyle = css(C.ink, 0.74 * alpha);
+  ctx.beginPath();
+  ctx.roundRect(x0, y0, x1 - x0, y1 - y0, Math.min((y1 - y0) / 2, 9 * textScale));
+  ctx.fill();
+  ctx.restore();
 }
 
 /** Text on the picture: a dark outline for contrast, then the letters. */
@@ -201,6 +217,12 @@ export function text(ctx: CanvasRenderingContext2D, value: string, x: number, y:
     ctx.rotate(options.rotate);
     x = 0;
     y = 0;
+  }
+  if (options.plate && ctx.textBaseline === 'middle') {
+    const spacing = (options.tracking ?? 0.06) * size;
+    const width = ctx.measureText(value).width - spacing; // the last letter's spacing is not part of the word
+    const left = ctx.textAlign === 'center' ? x - width / 2 - spacing / 2 : ctx.textAlign === 'left' ? x : x - width - spacing;
+    plate(ctx, left - size * 0.42, y - size * 0.68, left + width + size * 0.42, y + size * 0.62, options.plate * alpha);
   }
   // Contrast comes from a soft dark shadow drawn twice, not a hard outline: the letters stay thin and clean.
   ctx.shadowColor = css(C.ink, 0.95 * alpha);
@@ -224,6 +246,39 @@ export function measure(ctx: CanvasRenderingContext2D, value: string, options: T
   const width = ctx.measureText(value).width;
   ctx.restore();
   return width;
+}
+
+export interface QuantityOptions {
+  size?: number;
+  color?: RGB;
+  alpha?: number;
+  /** Leave the unit out (when there is no room for it). */
+  bare?: boolean;
+}
+
+/**
+ * A measurement on the picture, always written the same way: the number in the numeral face, its unit
+ * smaller in the reading face, on one dark plate, centred on (x, y). Returns the plate's width.
+ */
+export function quantity(ctx: CanvasRenderingContext2D, value: string, unit: string, x: number, y: number, options: QuantityOptions = {}): number {
+  const alpha = options.alpha ?? 1;
+  const size = options.size ?? 14;
+  const unitSize = size * 0.72;
+  const gap = options.bare ? 0 : size * textScale * 0.28;
+  const valueWidth = measure(ctx, value, { size, weight: 700, tracking: 0 });
+  const unitWidth = options.bare ? 0 : measure(ctx, unit, { size: unitSize, font: 'body', weight: 600, tracking: 0.02 });
+  const width = valueWidth + gap + unitWidth;
+  const pad = size * textScale * 0.42;
+  if (alpha <= 0.003) return width + pad * 2;
+  const half = size * textScale * 0.66;
+  plate(ctx, x - width / 2 - pad, y - half, x + width / 2 + pad, y + half * 0.94, alpha);
+  text(ctx, value, x - width / 2, y, { size, color: options.color ?? C.white, alpha, weight: 700, tracking: 0, align: 'left' });
+  if (!options.bare) {
+    text(ctx, unit, x - width / 2 + valueWidth + gap, y + size * textScale * 0.06, {
+      size: unitSize, color: C.white, alpha: alpha * 0.78, font: 'body', weight: 600, tracking: 0.02, align: 'left',
+    });
+  }
+  return width + pad * 2;
 }
 
 /** A small check mark, drawn rather than typed, centred on (x, y). */

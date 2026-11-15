@@ -259,7 +259,10 @@ async function boot(): Promise<void> {
   if (params.get('wake') === '0') brain.wakeEnabled = false;
   if (params.get('talk') === 'open') brain.talkMode = 'open';
   // For recordings and screenshots with no Gemini session: show the panel as it looks when one is up.
-  if (params.get('panel') === '1') attending.setOnline(true);
+  if (params.get('panel') === '1') {
+    attending.setOnline(true);
+    brainChip.set('Gemini ready', 'ok');
+  }
   procedure.on((event) => {
     if (event.type === 'step' || event.type === 'stitch-done' || event.type === 'reset') brain.noteState();
   });
@@ -727,10 +730,10 @@ async function boot(): Promise<void> {
     const total = procedure.steps.length - 1;
     const id = procedure.step.id;
     if (arm.active) return 'Arm mode';
-    if (id === 'standby') return tracker.pose.locked ? 'Ready \u00B7 wound locked' : 'Ready \u00B7 finding the wound';
+    if (id === 'standby') return tracker.pose.locked ? 'Wound locked' : 'Finding the wound';
     const where = `Step ${procedure.index} of ${total}`;
     if (id === 'stitch') return `${where} \u00B7 Suture ${Math.min(procedure.count, procedure.stitchesDone + 1)} of ${procedure.count}`;
-    if (id === 'complete') return `${where} \u00B7 ${procedure.stitchesDone} of ${procedure.count} sutures`;
+    if (id === 'complete') return `${where} \u00B7 ${procedure.step.label}`;
     if (id === 'plan') return `${where} \u00B7 ${procedure.count} sutures planned`;
     return `${where} \u00B7 ${procedure.step.label}`;
   };

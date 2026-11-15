@@ -1,7 +1,7 @@
 import type { Scene } from '../../app/scene';
 import { Appear } from '../../app/scene';
 import { ease, lerp, progress, spring } from '../../core/dom';
-import { C, dot, glow, measure, polyline, text } from '../draw';
+import { C, dot, glow, measure, plate, polyline, text, textHeight } from '../draw';
 import type { Frame, Layer } from '../renderer';
 import { WoundSpace } from '../space';
 
@@ -34,11 +34,12 @@ export class WoundLockLayer implements Layer {
     if (this.searching > 0.01) {
       const dots = '.'.repeat(1 + (Math.floor(t * 2) % 3));
       text(ctx, `LOOKING FOR THE WOUND${dots.padEnd(3, ' ')}`, frame.width / 2, frame.height * 0.84, {
-        size: 16, color: C.cyan, alpha: this.searching * (0.7 + 0.25 * Math.sin(t * 2.4)), font: 'body', tracking: 0.2, weight: 700,
+        size: 16, color: C.cyan, alpha: this.searching * (0.7 + 0.25 * Math.sin(t * 2.4)), font: 'body', tracking: 0.2, weight: 700, plate: 1,
       });
     }
 
-    const wanted = !hidden && pose.locked && (step === 'standby' || step === 'scan');
+    // The idle screen has the picture to itself: no brackets or tag showing through its lettering.
+    const wanted = !hidden && !this.scene.attract && pose.locked && (step === 'standby' || step === 'scan');
     const presence = this.presence.update(wanted, t, dt) * pose.confidence;
     if (presence <= 0.003) return;
 
@@ -79,8 +80,12 @@ export class WoundLockLayer implements Layer {
       const tagAlpha = presence * ease.outCubic(progress(t, this.lockedAt + 0.4, 0.45));
       const [tx, ty] = w.point(0, halfAcross + 5.5);
       const options = { size: 13, font: 'body' as const, tracking: 0.18, weight: 700 };
+      const wide = measure(ctx, 'WOUND LOCKED', options);
+      const tall = textHeight(13);
+      // The lock light and the words share one plate.
+      plate(ctx, tx - wide / 2 - tall * 1.5, ty - tall * 0.68, tx + wide / 2 + tall * 0.42, ty + tall * 0.62, tagAlpha);
       text(ctx, 'WOUND LOCKED', tx, ty, { ...options, color: C.cyan, alpha: tagAlpha });
-      dot(ctx, tx - measure(ctx, 'WOUND LOCKED', options) / 2 - 12, ty, 3.2, C.green, tagAlpha);
+      dot(ctx, tx - wide / 2 - tall * 0.72, ty, 3.2, C.green, tagAlpha, 0);
     }
   }
 }

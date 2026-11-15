@@ -2,7 +2,7 @@ import type { Scene } from '../../app/scene';
 import { Appear } from '../../app/scene';
 import { clamp, pop } from '../../core/dom';
 import { PROCEDURE, sutureOffsetMm } from '../../procedure/data';
-import { C, circle, dot, glow, polyline, segment, text, type RGB } from '../draw';
+import { C, circle, dot, glow, polyline, quantity, segment, text, type RGB } from '../draw';
 import type { Frame, Layer } from '../renderer';
 import { WoundSpace } from '../space';
 
@@ -68,25 +68,25 @@ export class PlanLayer implements Layer {
       }
 
       if (isCurrent) {
-        // "Here next": a slow pulse spreading from the target.
+        // "Here next": the entry point is where the needle goes. A reticle turns slowly around it and a
+        // pulse spreads from it. Both stay on the near side, clear of the danger zone.
         const phase = (t % 1.5) / 1.5;
-        const [cx, cy] = w.point(along, 0);
-        glow(ctx, circle(cx, cy, (biteMm + 2 + phase * 5) * px), C.amber, {
+        const reticle = ringRadius * 2.1;
+        glow(ctx, circle(ex, ey, reticle * (1 + phase * 0.75)), C.amber, {
           width: 1.4, alpha: alpha * (1 - phase) * 0.8, bloom: 1.1, halo: 0.25,
         });
-        glow(ctx, circle(cx, cy, (biteMm + 2) * px), C.amber, { width: 1.2, alpha: alpha * 0.5, bloom: 0.6, halo: 0.25 });
-        // The entry point is where the needle goes: a reticle turns slowly around it.
-        const reticle = ringRadius * 2.1;
         const unit = (Math.PI * 2 * reticle) / 8;
         glow(ctx, circle(ex, ey, reticle), C.amber, {
           width: 1.5, alpha: alpha * 0.95, bloom: 0.9, halo: 0.3, dash: [unit * 0.62, unit * 0.38], dashOffset: -t * unit * 0.9, cap: 'butt',
         });
       }
 
-      // The number, on the near side, beyond the entry point.
+      // The number, on the near side, beyond the entry point: on a plate when the sutures are far enough
+      // apart on screen for the plates not to touch.
       const [nx, ny] = w.point(along, -(biteMm + 4.6));
       text(ctx, String(i + 1), nx, ny, {
         size: numberSize, color: isDone ? C.green : isCurrent || isActive ? C.amber : C.white, alpha, weight: 700, tracking: 0,
+        plate: spacingMm * px > 52 ? 1 : 0,
       });
     }
 
@@ -110,8 +110,8 @@ export class PlanLayer implements Layer {
         });
       }
       const labelAlpha = rulerOn * this.ruler.part(t, 1.5, 0.5);
-      const [lx, ly] = w.point((first + sutureOffsetMm(1)) / 2, across - 3.6);
-      text(ctx, `${spacingMm} mm`, lx, ly, { size: clamp(2.8 * px, 14, 19), color: C.cyan, alpha: labelAlpha, weight: 700 });
+      const [lx, ly] = w.point((first + sutureOffsetMm(1)) / 2, across - 4.2);
+      quantity(ctx, String(spacingMm), 'mm', lx, ly, { size: clamp(2.8 * px, 14, 19), alpha: labelAlpha });
 
       // Bite: how far from the wound edge the needle goes in, shown once, beside the first suture.
       const biteAlong = first - 4.4;
@@ -124,8 +124,13 @@ export class PlanLayer implements Layer {
           width: 1.1, alpha: rulerOn * biteDraw, bloom: 0.5,
         });
       }
-      const [tx, ty] = w.point(biteAlong - 5.4, -biteMm / 2);
-      text(ctx, `${biteMm} mm`, tx, ty, { size: clamp(2.8 * px, 14, 19), color: C.cyan, alpha: rulerOn * this.ruler.part(t, 1.6, 0.5), weight: 700 });
+      // Clear of its own bracket: the label's right edge stops short of it.
+      const biteSize = clamp(2.8 * px, 14, 19);
+      const biteAlpha = rulerOn * this.ruler.part(t, 1.6, 0.5);
+      const [bx0, by0] = w.point(biteAlong - 1.6, -biteMm / 2);
+      const wide = quantity(ctx, String(biteMm), 'mm', -9999, -9999, { size: biteSize, alpha: 0 });
+      const away = wide / 2 + 6;
+      quantity(ctx, String(biteMm), 'mm', bx0 - Math.cos(w.angle) * away, by0 - Math.sin(w.angle) * away, { size: biteSize, alpha: biteAlpha });
     }
   }
 }

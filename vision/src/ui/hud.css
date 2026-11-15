@@ -46,10 +46,12 @@
 
 .glass {
   position: relative;
-  background: linear-gradient(180deg, rgba(var(--ink-rgb), 0.56), rgba(var(--ink-rgb), 0.7));
+  /* Near-black and nearly opaque, with the colour taken out of what shows through: a panel looks the same
+     over skin as over the drape. */
+  background: linear-gradient(180deg, rgba(var(--ink-rgb), 0.9), rgba(var(--ink-rgb), 0.94));
   border: 1px solid rgba(var(--accent-rgb), 0.24);
   border-radius: calc(var(--u) * 0.7);
-  backdrop-filter: blur(calc(var(--u) * 1.8)) saturate(1.2);
+  backdrop-filter: blur(calc(var(--u) * 1.8)) saturate(0.4) brightness(0.8);
   box-shadow:
     0 calc(var(--u) * 1.4) calc(var(--u) * 4.5) rgba(0, 0, 0, 0.42),
     0 0 calc(var(--u) * 3.2) rgba(var(--accent-rgb), 0.1),
@@ -110,8 +112,8 @@
   padding: calc(var(--u) * 1.5) calc(var(--u) * 2.1) calc(var(--u) * 1.35);
   will-change: transform, opacity;
 }
+/* Green while it is hearing you (good: go ahead); otherwise the brand's cyan. Amber is kept for caution. */
 .gem[data-state='listening'] { --accent: var(--green); --accent-rgb: var(--green-rgb); }
-.gem[data-state='thinking'] { --accent: var(--amber); --accent-rgb: var(--amber-rgb); }
 .gem[data-state='listening'],
 .gem[data-state='thinking'],
 .gem[data-state='answering'] {
@@ -365,8 +367,8 @@
 }
 .rail__item:not(:last-child)::before { background: rgba(255, 255, 255, 0.16); }
 .rail__item:not(:last-child)::after {
-  background: var(--cyan);
-  box-shadow: 0 0 calc(var(--u) * 0.9) rgba(var(--cyan-rgb), 0.85);
+  background: var(--green);
+  box-shadow: 0 0 calc(var(--u) * 0.9) rgba(var(--green-rgb), 0.8);
   transform: scaleY(0);
   transform-origin: 50% 0;
   transition: transform var(--spring-ms) var(--spring);
@@ -394,7 +396,7 @@
 .rail__check {
   position: absolute;
   inset: 20%;
-  color: var(--cyan);
+  color: var(--green);
   opacity: 0;
   transition: opacity 200ms ease;
 }
@@ -403,10 +405,11 @@
   stroke-dashoffset: 1;
   transition: stroke-dashoffset 420ms cubic-bezier(0.16, 1, 0.3, 1) 120ms;
 }
+/* Done is good: green, like a placed suture. */
 .rail__item[data-state='done'] .rail__node {
-  border-color: var(--cyan);
-  background: rgba(var(--cyan-rgb), 0.16);
-  box-shadow: 0 0 calc(var(--u) * 1.1) rgba(var(--cyan-rgb), 0.35);
+  border-color: var(--green);
+  background: rgba(var(--green-rgb), 0.14);
+  box-shadow: 0 0 calc(var(--u) * 1.1) rgba(var(--green-rgb), 0.32);
 }
 .rail__item[data-state='done'] .rail__node .num { opacity: 0; }
 .rail__item[data-state='done'] .rail__check { opacity: 1; }
@@ -431,7 +434,7 @@
   text-shadow: 0 0 calc(var(--u) * 0.9) rgba(var(--ink-rgb), 0.95), 0 0 calc(var(--u) * 0.3) rgba(var(--ink-rgb), 0.9);
   transition: color 380ms ease;
 }
-.rail__item[data-state='done'] .rail__label { color: rgba(var(--cyan-rgb), 0.86); }
+.rail__item[data-state='done'] .rail__label { color: rgba(var(--green-rgb), 0.86); }
 .rail__item[data-state='now'] .rail__label { display: none; }
 /* Before the procedure starts the list is a quiet preview of what is coming. */
 .rail__list:not(.rail__list--started) .rail__item { opacity: 0.72; }
@@ -591,11 +594,11 @@
   color: var(--green);
 }
 .debrief__title {
-  margin-top: calc(var(--u) * 0.5);
+  margin-top: calc(var(--u) * 0.35);
   font-family: var(--font-display);
   font-weight: 600;
   font-size: var(--t-xl);
-  line-height: 1.05;
+  line-height: calc(var(--t-2xl) * 1.1);
   color: #fff;
 }
 .debrief__stat {
@@ -746,6 +749,9 @@
   animation: gem-pulse 1400ms ease-in-out infinite;
 }
 
+/* The opening title says the name; the small lockup in the corner steps aside while it does. */
+.hud--title .brand { opacity: 0 !important; }
+
 /* The opening title: words in Inter, like everything else that is read. */
 .title-card__sub,
 .title-card__note { font-family: var(--font-body); font-weight: 600; }
@@ -758,7 +764,7 @@
 
 /* The bottom stack sits clear of the corner label, and the label stays in front of the idle screen:
    "Training simulator · concept" is on screen in every state. */
-.bottom-stack { bottom: calc(var(--u) * 7.2); }
+.bottom-stack { bottom: calc(var(--u) * 9); }
 .corner-label { z-index: 5; color: rgba(255, 255, 255, 0.78); }
 
 /* Clean record mode (?clean=1): for B-roll and screenshots. The status chips and operator notices go;

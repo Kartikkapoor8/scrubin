@@ -2,7 +2,7 @@ import type { Scene } from '../../app/scene';
 import { Appear } from '../../app/scene';
 import { clamp, progress } from '../../core/dom';
 import { PROCEDURE } from '../../procedure/data';
-import { C, dot, glow, polyline, text, textHeight } from '../draw';
+import { C, dot, glow, polyline, text, textHeight, measure, plate, quantity } from '../draw';
 import type { Frame, Layer } from '../renderer';
 import { WoundSpace } from '../space';
 
@@ -57,9 +57,7 @@ export class MeasureLayer implements Layer {
     const counted = Math.round(marker.lengthMm * clamp(progress(t, this.presence.since + 0.45, 0.9), 0, 1));
     const value = this.presence.isOn ? counted : marker.lengthMm;
     const [nx, ny] = w.point(0, -(offset + 5.2));
-    text(ctx, `${value} mm`, nx, ny, {
-      size: clamp(3.6 * px, 17, 25), color: C.white, alpha: presence * p(0.45, 0.4), weight: 700, tracking: 0.02,
-    });
+    quantity(ctx, String(value), 'mm', nx, ny, { size: clamp(3.6 * px, 17, 25), alpha: presence * p(0.45, 0.4) });
 
     // What it is, on a leader from the wound to the far side.
     const tag = p(1.2, 0.5);
@@ -74,12 +72,16 @@ export class MeasureLayer implements Layer {
       dot(ctx, ax, ay, 2.2, C.cyan, presence * tag);
       const labelAlpha = presence * p(1.5, 0.5);
       const size = clamp(2.6 * px, 14, 17);
-      text(ctx, PROCEDURE.wound.label.toUpperCase(), cx + 8, cy - textHeight(size) * 0.3, {
-        size, color: C.cyan, alpha: labelAlpha, align: 'left', font: 'body', weight: 700, tracking: 0.16,
-      });
-      text(ctx, `linear · ${PROCEDURE.patient.site}`, cx + 8, cy + textHeight(size) * 0.72, {
-        size: size * 0.86, color: C.white, alpha: labelAlpha * 0.85, align: 'left', font: 'body', weight: 500, tracking: 0.01,
-      });
+      // Two lines on one plate: what it is, and where.
+      const name = PROCEDURE.wound.label.toUpperCase();
+      const where = `linear · ${PROCEDURE.patient.site}`;
+      const nameStyle = { size, font: 'body' as const, weight: 700, tracking: 0.16 };
+      const whereStyle = { size: size * 0.86, font: 'body' as const, weight: 500, tracking: 0.01 };
+      const wide = Math.max(measure(ctx, name, nameStyle), measure(ctx, where, whereStyle));
+      const line = textHeight(size);
+      plate(ctx, cx + 8 - line * 0.42, cy - line * 1.0, cx + 8 + wide + line * 0.3, cy + line * 1.36, labelAlpha);
+      text(ctx, name, cx + 8, cy - line * 0.3, { ...nameStyle, color: C.cyan, alpha: labelAlpha, align: 'left' });
+      text(ctx, where, cx + 8, cy + line * 0.72, { ...whereStyle, color: C.white, alpha: labelAlpha * 0.88, align: 'left' });
     }
   }
 }

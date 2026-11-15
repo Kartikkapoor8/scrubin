@@ -1,7 +1,7 @@
 import type { Scene } from '../../app/scene';
 import { Appear } from '../../app/scene';
 import { clamp, damp, ease, progress } from '../../core/dom';
-import { C, css, dot, glow, measure, mix, polyline, text, textHeight, type RGB } from '../draw';
+import { C, css, dot, glow, measure, polyline, text, textHeight, type RGB } from '../draw';
 import type { Frame, Layer } from '../renderer';
 import { WoundSpace } from '../space';
 
@@ -243,8 +243,7 @@ export class AnatomyLayer implements Layer {
       const [fromX, fromY] = w.point(exit[0], exit[1]);
       const [x, y] = w.point(exit[0] + end * 5, exit[1]);
       tags.push({
-        // Names are a paler tint of their structure's colour: red letters on skin do not carry across a room.
-        index: s, name, color: mine ? C.white : mix(structure.color, C.white, 0.5), alpha: labelAlpha, size, fromX, fromY, x, y,
+        index: s, name, color: mine ? C.white : structure.color, alpha: labelAlpha, size, fromX, fromY, x, y,
         width: measure(ctx, name, { size, font: 'body', weight: 700, tracking: 0.12 }),
       });
     }
@@ -272,6 +271,8 @@ export class AnatomyLayer implements Layer {
         [sa * reachOut, sc * BESIDE],
         [sa * reachOut, sc * (BESIDE - leg)],
       ]);
+      // A corner that would sit under a HUD panel is left out rather than drawn half hidden.
+      if (this.scene.keepOut.some((zone) => points[2] > zone.x0 - 12 && points[2] < zone.x1 + 12 && points[3] > zone.y0 - 12 && points[3] < zone.y1 + 12)) continue;
       glow(frame.ctx, polyline(points), C.cyan, { width: 1.2, alpha: alpha * 0.6, bloom: 0.5 });
     }
   }
@@ -310,8 +311,9 @@ export class AnatomyLayer implements Layer {
       const y = tag.y + dy;
       glow(ctx, polyline([tag.fromX, tag.fromY, startX, y]), tag.color, { width: 1, alpha: tag.alpha * 0.7, bloom: 0.3, halo: 0.4 });
       dot(ctx, tag.fromX, tag.fromY, 2.2, tag.color, tag.alpha);
-      text(ctx, tag.name, startX + side * 6, y, {
-        size: tag.size, color: tag.color, alpha: tag.alpha, font: 'body', weight: 700, tracking: 0.12, align: side > 0 ? 'left' : 'right',
+      // On a dark plate, in the structure's own colour: red letters straight on skin do not carry.
+      text(ctx, tag.name, startX + side * 10, y, {
+        size: tag.size, color: tag.color, alpha: tag.alpha, font: 'body', weight: 700, tracking: 0.12, align: side > 0 ? 'left' : 'right', plate: 1,
       });
     }
   }
@@ -406,7 +408,7 @@ export class AnatomyLayer implements Layer {
 
     const [tx, ty] = w.point(0, centre[Math.floor(centre.length / 2)][1] + halfWidth + 5.2);
     text(ctx, 'DANGER ZONE', tx, ty, {
-      size: clamp(2.6 * px, 14.5, 18), color: [255, 150, 158], alpha: alpha * (0.85 + 0.15 * pulse), font: 'body', weight: 800, tracking: 0.2,
+      size: clamp(2.6 * px, 14.5, 18), color: C.red, alpha: alpha * (0.85 + 0.15 * pulse), font: 'body', weight: 800, tracking: 0.2, plate: 1,
     });
   }
 }

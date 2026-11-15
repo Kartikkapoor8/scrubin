@@ -11,10 +11,11 @@ const STATE_TEXT: Record<AttendingState, string> = {
 };
 
 type RGB = [number, number, number];
+// Green while it is hearing you; otherwise the brand's cyan (amber is kept for caution).
 const WAVE_COLOUR: Record<AttendingState, RGB> = {
   idle: [63, 224, 255],
   listening: [77, 255, 176],
-  thinking: [255, 181, 71],
+  thinking: [63, 224, 255],
   answering: [63, 224, 255],
 };
 
@@ -417,7 +418,9 @@ export class AttendingCard {
     // answer keeps to six lines: from then on it scrolls up as it is typed.
     const line = this.lineHeight || (this.lineHeight = parseFloat(getComputedStyle(this.answer).lineHeight) || 30);
     const written = this.rest.offsetTop + line; // bottom of the line the writing has reached
-    const room = Math.min(written, line * 6);
+    // Once it is all written the box opens to show the whole answer (up to ten lines), from the start.
+    const finished = this.count >= this.full.length && !this.open;
+    const room = Math.min(written, line * (finished ? 10 : 6));
     this.answer.style.maxHeight = `${Math.ceil(room)}px`;
     const top = Math.max(0, Math.min(this.answer.scrollHeight - room, written - room));
     this.answer.scrollTop = top;

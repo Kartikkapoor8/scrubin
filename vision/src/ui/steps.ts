@@ -88,8 +88,8 @@ export class StepPanel {
     });
     if (index === 0) this.reveal(this.ready, animate);
 
-    // The suture counter rides in the card of whichever suturing step is open.
-    const showSutures = id === 'plan' || id === 'stitch' || id === 'complete';
+    // The suture counter rides in the card of whichever suturing step is open (the debrief has its own).
+    const showSutures = id === 'plan' || id === 'stitch';
     if (showSutures) {
       const card = this.items[index - 1].inner;
       if (this.sutures.parentElement !== card) card.appendChild(this.sutures);

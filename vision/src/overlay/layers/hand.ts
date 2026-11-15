@@ -1,7 +1,7 @@
 import type { Scene } from '../../app/scene';
 import { clamp, damp } from '../../core/dom';
 import { PROCEDURE, sutureOffsetMm } from '../../procedure/data';
-import { C, circle, dot, glow, mix, polyline, segment, text } from '../draw';
+import { C, circle, dot, glow, mix, polyline, segment, text, quantity } from '../draw';
 import type { Frame, Layer } from '../renderer';
 import { WoundSpace } from '../space';
 
@@ -122,9 +122,9 @@ export class HandLayer implements Layer {
     }
 
     if (this.aligned > 0.02) {
-      text(ctx, 'ALIGNED', sx, sy - radius - 18, { size: 15, color: C.green, alpha: alpha * this.aligned, font: 'body', tracking: 0.2, weight: 800 });
+      text(ctx, 'ALIGNED', sx, sy - radius - 20, { size: 15, color: C.green, alpha: alpha * this.aligned, font: 'body', tracking: 0.2, weight: 800, plate: 1 });
     } else if (distance >= 0 && distance < 60) {
-      text(ctx, `${Math.round(distance)} mm`, sx, sy - radius - 16, { size: 12.5, color: C.white, alpha: alpha * 0.85, weight: 500 });
+      quantity(ctx, String(Math.round(distance)), 'mm', sx, sy - radius - 20, { size: 12.5, alpha: alpha * 0.9 });
     }
   }
 }

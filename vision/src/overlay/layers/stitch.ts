@@ -2,7 +2,7 @@ import type { Scene } from '../../app/scene';
 import { clamp, ease, lerp, pop, progress } from '../../core/dom';
 import { PROCEDURE, sutureOffsetMm } from '../../procedure/data';
 import { STITCH_SECONDS } from '../../procedure/machine';
-import { C, check, circle, dot, glow, mix, polyline, text, type RGB } from '../draw';
+import { C, check, circle, dot, glow, mix, polyline, quantity, type RGB } from '../draw';
 import type { Frame, Layer } from '../renderer';
 import { WoundSpace } from '../space';
 
@@ -51,8 +51,9 @@ export class StitchLayer implements Layer {
     for (let i = 0; i < Math.min(procedure.stitchesDone, count); i++) {
       const along = sutureOffsetMm(i);
       const since = this.doneAt[i] === undefined ? 10 : t - this.doneAt[i];
-      const [kx, ky] = w.point(along, biteMm + 4.4);
-      check(ctx, kx, ky, clamp(2.6 * px, 9, 16), C.green, conf, ease.outCubic(progress(since, 0.1, 0.4)));
+      // Beside the suture's number on the near side: the far side belongs to the danger zone.
+      const [kx, ky] = w.point(along + 3.7, -(biteMm + 4.6));
+      check(ctx, kx, ky, clamp(1.9 * px, 8, 14), C.green, conf, ease.outCubic(progress(since, 0.1, 0.4)));
       if (since < 0.9) this.burst(frame, w, along, since / 0.9, conf);
       if (i > 0 && step === 'stitch') this.spacing(frame, w, i, since, conf);
     }
@@ -150,8 +151,11 @@ export class StitchLayer implements Layer {
       glow(ctx, polyline(w.points([[end, across - 1.2], [end, across + 1.2]])), C.green, { width: 1.2, alpha: conf * drawn, bloom: 0.5 });
     }
     const counted = measured * ease.outQuart(progress(since, 0.25, 0.7));
-    const [tx, ty] = w.point((from + to) / 2, across - 3.2);
-    text(ctx, counted.toFixed(1), tx, ty, { size: clamp(1.9 * px, 11, 14), color: C.green, alpha: conf * drawn, weight: 600, tracking: 0 });
+    const [tx, ty] = w.point((from + to) / 2, across - 3.6);
+    const size = clamp(1.7 * px, 10, 13);
+    // With its unit when two of these fit side by side; the number alone when they would touch.
+    const full = quantity(ctx, measured.toFixed(1), 'mm', -9999, -9999, { size, alpha: 0 });
+    quantity(ctx, counted.toFixed(1), 'mm', tx, ty, { size, color: C.green, alpha: conf * drawn, bare: full + 8 > spacingMm * px });
   }
 
   /** The moment a suture is confirmed: a ring and sparks thrown outward. */
