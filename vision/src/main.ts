@@ -2,6 +2,7 @@ import '@fontsource-variable/space-grotesk/index.css';
 import '@fontsource-variable/inter/index.css';
 import '@fontsource-variable/jetbrains-mono/index.css';
 import './styles.css';
+import './ui/hud.css';
 
 import { loadSettings, saveSettings, type Scene } from './app/scene';
 import { ArmMode } from './arm/mode';
@@ -25,7 +26,7 @@ import { ScanLayer } from './overlay/layers/scan';
 import { StitchLayer } from './overlay/layers/stitch';
 import { WoundLockLayer } from './overlay/layers/wound';
 import { OverlayRenderer } from './overlay/renderer';
-import { PROCEDURE, type StepId } from './procedure/data';
+import type { StepId } from './procedure/data';
 import { Procedure } from './procedure/machine';
 import { HandTracker } from './tracking/hands';
 import { loadMarker, MARKER_PRESETS, markerFromSample, saveMarker, WoundDetector, WoundTracker } from './tracking/wound';
@@ -55,6 +56,7 @@ async function loadConfig(): Promise<ServerConfig> {
 
 const KEYS: Array<[string, string]> = [
   ['Space  →', 'Next: place the next suture, or go to the next step; after the score, start over'],
+  ['Hold Space', 'Talk to Gemini: hold, ask, let go (or just say "Hey Gemini")'],
   ['←', 'Previous step'],
   ['Shift →', 'Next step, skipping any sutures not yet placed'],
   ['Presenter', 'Forward = Next, back = previous step, blank-screen button (B or .) = talk'],
@@ -63,9 +65,9 @@ const KEYS: Array<[string, string]> = [
   ['A', 'Autoplay (for recording)'],
   ['H', 'Hide every overlay (clean picture)'],
   ['N', 'Sound on / off'],
-  ['G', 'Talk to the attending: hold and speak, or tap and speak (Shift+G turns it off / on)'],
-  ['V', 'Attending speaks its answers aloud: on / off'],
-  ['L', 'Send the attending the current picture'],
+  ['G', 'Talk to Gemini: hold and speak, or tap and speak (Shift+G turns Gemini off / on)'],
+  ['V', 'Gemini speaks its answers aloud: on / off'],
+  ['L', 'Send Gemini the current picture'],
   ['1 2 3 4', 'Input: HoloLens / webcam / video file / simulated arm'],
   ['C', 'Record the raw HoloLens stream to vision/media (C again stops; Shift+C records 60 s)'],
   ['M', 'Arm mode on / off: the backup demo on a bare forearm (also ?mode=arm)'],
@@ -150,7 +152,7 @@ async function boot(): Promise<void> {
   new FeedbackToast(bottom, procedure);
   new ScoreCard(hud.root, procedure);
   const vitals = new VitalsPanel(hud.root, procedure);
-  const attending = new AttendingCard(bottom);
+  const attending = new AttendingCard(hud.root);
   const attract = new AttractScreen(hud.root);
   // A running clock for measuring how far the headset's picture trails real life (key Y).
   const syncClock = add(hud.root, el('div', 'sync-clock'));
@@ -168,14 +170,9 @@ async function boot(): Promise<void> {
     if (event.type === 'step') {
       if (event.step.id === 'complete') sounds.complete();
       else if (event.step.id !== 'standby') sounds.step();
-      if (event.step.id !== 'stitch') attending.hide();
     }
     if (event.type === 'stitch-start') sounds.stitchStart();
-    if (event.type === 'stitch-done') {
-      sounds.stitchDone(event.index);
-      const line = PROCEDURE.sutures.lines[event.index];
-      if (line) attending.say(line, { hold: 5 });
-    }
+    if (event.type === 'stitch-done') sounds.stitchDone(event.index);
     if (event.type === 'reset') attending.hide();
   });
   const handChip = hud.addChip('Hands');
@@ -245,6 +242,8 @@ async function boot(): Promise<void> {
 
   const brainChip = hud.addChip('Attending off');
   const brain = new AttendingBrain(brainHost, attending, (state, detail) => {
+    // The panel is on screen while the session is up, and simply absent when it is not.
+    attending.setOnline(state !== 'off' && state !== 'error' && state !== 'connecting');
     if (state === 'error') {
       brainChip.set('Attending offline', 'bad');
       if (detail) hud.notice(detail, 6000);
@@ -256,6 +255,7 @@ async function boot(): Promise<void> {
     else brainChip.set('Attending answering', 'ok');
   });
   if (params.get('voice') === '0') brain.voice = false;
+  if (params.get('wake') === '0') brain.wakeEnabled = false;
   if (params.get('talk') === 'open') brain.talkMode = 'open';
   procedure.on((event) => {
     if (event.type === 'step' || event.type === 'stitch-done' || event.type === 'reset') brain.noteState();
@@ -319,11 +319,11 @@ async function boot(): Promise<void> {
     },
     back: () => { touch(); if (arm.active) arm.back(); else procedure.back(); },
     reset: resetNow,
-    /** Talk button down / up. */
-    talk: (down: boolean) => {
+    /** Talk button down / up. `held`: a key that only talks while held (Space): the release always ends the question. */
+    talk: (down: boolean, held = false) => {
       touch();
-      if (down) brain.talkDown();
-      else brain.talkUp();
+      if (down) brain.talkDown(held ? 500 : 0);
+      else brain.talkUp(held);
     },
   };
   procedure.on(() => { lastActivity = performance.now(); });
@@ -418,6 +418,8 @@ async function boot(): Promise<void> {
   };
 
   window.addEventListener('pointerdown', () => sounds.unlock());
+  let spaceTimer = 0;
+  let spaceTalking = false;
   let lastPointer = performance.now();
   window.addEventListener('pointermove', () => { lastPointer = performance.now(); });
   window.addEventListener('keydown', (event) => {
@@ -431,7 +433,18 @@ async function boot(): Promise<void> {
     switch (event.key) {
       // Space, and a presenter's forward button (PageDown, or the right arrow on some), are the one button:
       // the next suture if there is one to place, otherwise the next step. Shift + right arrow skips ahead.
-      case ' ': case 'PageDown': actions.next(); break;
+      // Space is two keys in one: a tap is Next, held it is the talk button. Which one it was is only known
+      // a moment later, so talking starts with the last half second the microphone heard.
+      case ' ':
+        window.clearTimeout(spaceTimer);
+        spaceTalking = false;
+        spaceTimer = window.setTimeout(() => {
+          spaceTimer = 0;
+          spaceTalking = true;
+          actions.talk(true, true);
+        }, 320);
+        break;
+      case 'PageDown': actions.next(); break;
       case 'ArrowRight': if (event.shiftKey) procedure.next(); else actions.next(); break;
       case 'ArrowLeft': case 'PageUp': actions.back(); break;
       case 's': case 'S': actions.stitch(); break;
@@ -520,6 +533,16 @@ async function boot(): Promise<void> {
 
   window.addEventListener('keyup', (event) => {
     if (event.key === 'g' || event.key === 'G' || event.key === 'b' || event.key === 'B' || event.key === '.') actions.talk(false);
+    if (event.key === ' ') {
+      if (spaceTimer) {
+        window.clearTimeout(spaceTimer);
+        spaceTimer = 0;
+        actions.next();
+      } else if (spaceTalking) {
+        spaceTalking = false;
+        actions.talk(false, true);
+      }
+    }
   });
 
   if (params.get('mode') === 'arm') arm.setActive(true);
@@ -660,6 +683,8 @@ async function boot(): Promise<void> {
     debug: () => Object.fromEntries(Object.entries(debug).map(([name, read]) => [name, read()])),
     scene,
     brain,
+    /** The Gemini panel, for checks with made-up answers (dev/shot.mjs; no key needed). */
+    panel: attending,
     arm,
     /** Ask the attending a typed question (needs the Gemini session to be on: press G first). */
     ask: (text: string) => brain.ask(text),
@@ -688,6 +713,19 @@ async function boot(): Promise<void> {
   let worstFrame = 0;
   let worstResetAt = 0;
 
+  /** Where the procedure is, in one line, for the Gemini panel. */
+  const contextLine = (): string => {
+    const total = procedure.steps.length - 1;
+    const id = procedure.step.id;
+    if (arm.active) return 'Arm mode';
+    if (id === 'standby') return tracker.pose.locked ? 'Ready \u00B7 wound locked' : 'Ready \u00B7 finding the wound';
+    const where = `Step ${procedure.index} of ${total}`;
+    if (id === 'stitch') return `${where} \u00B7 Suture ${Math.min(procedure.count, procedure.stitchesDone + 1)} of ${procedure.count}`;
+    if (id === 'complete') return `${where} \u00B7 ${procedure.stitchesDone} of ${procedure.count} sutures`;
+    if (id === 'plan') return `${where} \u00B7 ${procedure.count} sutures planned`;
+    return `${where} \u00B7 ${procedure.step.title}`;
+  };
+
   const frame = (now: number) => {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
@@ -707,7 +745,7 @@ async function boot(): Promise<void> {
     // The table looks after itself between groups: the idle screen after a few quiet seconds in Ready, and
     // back to Ready by itself when a finished (or abandoned) run has been left alone.
     const quiet = (now - lastActivity) / 1000;
-    const busyTalking = brain.state === 'hearing' || brain.state === 'thinking' || brain.state === 'answering';
+    const busyTalking = brain.state === 'hearing' || brain.state === 'thinking' || brain.state === 'answering' || brain.speaking;
     if (busyTalking) lastActivity = now;
     const showAttract = attractAfter > 0 && !scene.hidden && !procedure.autoplay && !busyTalking && !arm.active
       && procedure.step.id === 'standby' && quiet > attractAfter;
@@ -718,6 +756,10 @@ async function boot(): Promise<void> {
       resetNow();
     }
     attending.setLevel(brain.talking ? brain.mic.level : 0);
+    attending.setVoiceLevel(brain.voiceLevel);
+    attending.setSpeaking(brain.speaking);
+    attending.setContext(contextLine());
+    attending.update(t, dt);
 
     // Zoom toward the wound while planning and stitching, so the fine work fills the screen.
     const pose = tracker.pose;
@@ -755,7 +797,7 @@ async function boot(): Promise<void> {
       lastKeepOut = now;
       const origin = stage.getBoundingClientRect();
       scene.keepOut = [];
-      for (const panel of hud.root.querySelectorAll<HTMLElement>('.steps, .vitals, .score.panel--on')) {
+      for (const panel of hud.root.querySelectorAll<HTMLElement>('.steps, .vitals, .score.panel--on, .gem')) {
         if (scene.attract || Number(getComputedStyle(panel).opacity) < 0.5) continue;
         const box = panel.getBoundingClientRect();
         if (box.width < 4 || box.height < 4) continue;

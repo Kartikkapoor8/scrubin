@@ -44,6 +44,24 @@ export const ease = {
   },
 };
 
+/**
+ * The app's one spring, as a function of seconds since the thing was let go: 0 at rest, settling on 1 in
+ * about 0.45 s with a hint of overshoot. Drawn overlays use this; DOM panels use the same spring through
+ * Motion (see ui/motion.ts), so everything on screen moves with one character.
+ */
+export function spring(seconds: number): number {
+  if (seconds <= 0) return 0;
+  // stiffness 260, damping 26, mass 1
+  return 1 - Math.exp(-13 * seconds) * (Math.cos(9.54 * seconds) + 1.3627 * Math.sin(9.54 * seconds));
+}
+
+/** A livelier version for small things that pop (targets, knots, check marks): settles in about 0.3 s. */
+export function pop(seconds: number): number {
+  if (seconds <= 0) return 0;
+  // stiffness 520, damping 32, mass 1
+  return 1 - Math.exp(-16 * seconds) * (Math.cos(16.27 * seconds) + 0.983 * Math.sin(16.27 * seconds));
+}
+
 /** 0 before `start`, 1 after `start + duration`, linear in between. */
 export function progress(t: number, start: number, duration: number): number {
   if (duration <= 0) return t >= start ? 1 : 0;

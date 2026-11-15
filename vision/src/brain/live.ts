@@ -2,6 +2,19 @@ import type { FunctionResponse, LiveServerMessage, Session } from '@google/genai
 import type { AttendingCard } from '../ui/attending';
 import { Mic, VoicePlayer } from './mic';
 import { SILENT_TOOLS, STRUCTURES, systemPrompt, toolDeclarations, type BrainHost, type Structure } from './tools';
+import { WakeListener, withoutWakePhrase } from './wake';
+
+/** What the panel says Gemini did, for each tool that changes the screen. */
+const ACTION_TEXT: Record<string, string> = {
+  next_step: 'Moved to the next step',
+  previous_step: 'Went back a step',
+  repeat_step: 'Replaying this step',
+  look_at_view: 'Looked at your view',
+};
+const STRUCTURE_TEXT: Record<string, string> = {
+  radial_artery: 'radial artery', ulnar_artery: 'ulnar artery', veins: 'veins', median_nerve: 'median nerve',
+  flexor_tendons: 'flexor tendons', danger_zone: 'danger zone', wound: 'wound',
+};
 
 /**
  * off         not started
@@ -37,6 +50,20 @@ export class AttendingBrain {
    */
   talkMode: 'push' | 'open' = 'push';
   readonly mic = new Mic();
+  /**
+   * Hands-free: "Hey Gemini" opens a question, and the speaker falling silent ends it. The talk button
+   * keeps working beside it. Turn off with ?wake=0.
+   */
+  wakeEnabled = true;
+  readonly wake = new WakeListener({
+    onWake: (rest) => {
+      if (!this.openFromWake()) { this.wake.endCapture(); return; }
+      if (rest) this.heard(rest);
+    },
+    onWords: (text) => this.heard(text),
+    onPause: () => this.pauseHeard(),
+    onState: () => this.card.setIdleHint(this.idleHint()),
+  });
 
   private session: Session | null = null;
   private player = new VoicePlayer();
@@ -71,6 +98,9 @@ export class AttendingBrain {
   private heardAt = 0;
   private talkTimer = 0;
   private answerTimer = 0;
+  private pauseTimer = 0;
+  /** The question as the browser's own recogniser hears it, live (shown in preference to Gemini's later transcript). */
+  private liveQuestion = '';
 
   // The turn in progress.
   private question = '';
@@ -97,8 +127,22 @@ export class AttendingBrain {
     return this.talkMode === 'open' ? this.session !== null : this.gateOpen;
   }
 
-  /** Talk button pressed (key, presenter, phone remote). The first press also turns the attending on. */
-  talkDown(): void {
+  /** Gemini's voice is playing right now (it can outlast the written answer by a few seconds). */
+  get speaking(): boolean {
+    return this.player.speaking;
+  }
+
+  /** 0..1 loudness of Gemini's voice, for the waveform. */
+  get voiceLevel(): number {
+    return this.player.level;
+  }
+
+  /**
+   * Talk button pressed (key, presenter, phone remote). The first press also turns the attending on.
+   * `prerollMs`: also send this much of what the microphone has just heard (a key held for talking is only
+   * told from a tap a moment after the speaker has started).
+   */
+  talkDown(prerollMs = 0): void {
     this.mic.resume();
     if (!this.wanted) {
       void this.start();
@@ -109,27 +153,71 @@ export class AttendingBrain {
       this.closeGate(); // a second tap ends a tapped question
       return;
     }
-    if (!this.gateOpen) this.openGate();
+    if (!this.gateOpen) this.openGate(prerollMs, false);
   }
 
-  /** Talk button released. A hold ends the question here; a quick tap leaves it open until the speaker stops. */
-  talkUp(): void {
+  /**
+   * Talk button released. A hold ends the question here; a quick tap leaves it open until the speaker
+   * stops. `force`: the release always ends it (a key that only talks when held).
+   */
+  talkUp(force = false): void {
     if (!this.gateOpen || this.latched) return;
-    if (performance.now() - this.talkStartedAt >= 350) this.closeGate();
+    if (force || performance.now() - this.talkStartedAt >= 350) this.closeGate();
     else this.latched = true;
   }
 
-  private openGate(): void {
+  /** "Hey Gemini" was heard: open a question that ends when the speaker stops. False if that is not possible now. */
+  private openFromWake(): boolean {
+    if (!this.wanted || !this.session || this.talkMode === 'open' || this.gateOpen) return false;
+    // The phrase is recognised a moment after it is said: send what was said since, so the question is whole.
+    this.openGate(1800, true);
+    this.latched = true;
+    return true;
+  }
+
+  /** The question's words so far, from the browser's recogniser. */
+  private heard(text: string): void {
+    if (!this.gateOpen) return;
+    window.clearTimeout(this.pauseTimer);
+    this.heardAt = performance.now();
+    if (!text) return;
+    this.liveQuestion = text;
+    this.card.wake('listening', text);
+  }
+
+  /** The recogniser thinks the speaker has paused. With nobody holding a button, that ends the question. */
+  private pauseHeard(): void {
+    if (!this.gateOpen || !this.latched) return;
+    window.clearTimeout(this.pauseTimer);
+    // New words within the next moment cancel this (see heard()).
+    this.pauseTimer = window.setTimeout(() => {
+      if (this.gateOpen && this.latched) this.closeGate();
+    }, 450);
+  }
+
+  /** What the panel invites people to do, given what is working. */
+  private idleHint(): string {
+    return this.wakeEnabled && this.wake.state === 'listening' ? 'Say \u201CHey Gemini\u201D' : 'Hold Space and ask';
+  }
+
+  private openGate(prerollMs: number, fromWake: boolean): void {
     if (!this.session) return;
     this.player.stop(); // the trainee has the floor
     this.gateOpen = true;
     this.latched = false;
     this.talkStartedAt = performance.now();
     this.heardAt = 0;
+    this.liveQuestion = '';
     window.clearTimeout(this.answerTimer);
+    window.clearTimeout(this.pauseTimer);
     if (this.manualTurns) {
       try { this.session.sendRealtimeInput({ activityStart: {} }); } catch { /* socket closing */ }
     }
+    if (prerollMs > 0 && !this.micMuted) {
+      for (const chunk of this.mic.lastChunks(prerollMs)) this.sendSpeech(chunk);
+    }
+    // From here on, what the recogniser hears is the question (a wake phrase has already told it where to start).
+    if (!fromWake) this.wake.beginCapture();
     this.turnActive = false;
     this.beginTurn();
     this.card.wake('listening');
@@ -138,23 +226,36 @@ export class AttendingBrain {
     window.clearInterval(this.talkTimer);
     this.talkTimer = window.setInterval(() => {
       const now = performance.now();
-      if (this.mic.level > 0.05) this.heardAt = now;
+      if (this.mic.speaking) this.heardAt = now;
       const tooLong = now - this.talkStartedAt > 15000;
-      const finished = this.latched && this.heardAt > 0 && now - this.heardAt > 1400;
+      const finished = this.latched && this.heardAt > 0 && now - this.heardAt > 1600;
       const nobodySpoke = this.latched && this.heardAt === 0 && now - this.talkStartedAt > 6000;
-      if (tooLong || finished || nobodySpoke) this.closeGate();
+      if (nobodySpoke) this.closeGate(true);
+      else if (tooLong || finished) this.closeGate();
     }, 100);
   }
 
-  private closeGate(): void {
+  /** `nothingSaid`: the turn is known to be empty; go back to Ready without waiting for an answer. */
+  private closeGate(nothingSaid = false): void {
     window.clearInterval(this.talkTimer);
+    window.clearTimeout(this.pauseTimer);
     if (!this.gateOpen) return;
     this.gateOpen = false;
     this.latched = false;
+    this.wake.endCapture();
     try {
       // Tell Gemini the question is over, so it answers at once instead of waiting for more.
       this.session?.sendRealtimeInput(this.manualTurns ? { activityEnd: {} } : { audioStreamEnd: true });
     } catch { /* socket closing */ }
+    // "Hey Gemini" with nothing after it, or a press that was over almost at once with nothing said (a slip
+    // of the finger): not a question. Back to Ready, quietly.
+    const slip = this.heardAt === 0 && performance.now() - this.talkStartedAt < 900;
+    if ((nothingSaid || slip) && !this.liveQuestion && !this.userSpoke) {
+      this.turnActive = false;
+      this.card.hide();
+      this.setState(this.wanted && this.session ? 'listening' : 'off');
+      return;
+    }
     this.card.setState('thinking');
     this.setState('thinking');
     // Nothing said, or nothing came back: do not sit on "thinking" for ever.
@@ -174,10 +275,12 @@ export class AttendingBrain {
     this.player.stop();
     window.clearTimeout(this.answerTimer);
     window.clearTimeout(this.thinkTimer);
+    window.clearTimeout(this.pauseTimer);
     if (this.gateOpen) {
       window.clearInterval(this.talkTimer);
       this.gateOpen = false;
       this.latched = false;
+      this.wake.endCapture();
       try { this.session?.sendRealtimeInput(this.manualTurns ? { activityEnd: {} } : { audioStreamEnd: true }); } catch { /* closing */ }
     }
     this.turnActive = false;
@@ -245,6 +348,10 @@ export class AttendingBrain {
       this.setState('error', name === 'NotAllowedError' ? 'Microphone permission was not given' : 'No microphone could be opened');
       return;
     }
+    // Gemini is thinking or speaking: nothing the microphone picks up then is for it.
+    this.wake.busy = () => this.state === 'thinking' || this.state === 'answering' || this.player.speaking;
+    if (this.wakeEnabled) this.wake.start();
+    this.card.setIdleHint(this.idleHint());
     void this.connect();
   }
 
@@ -255,8 +362,10 @@ export class AttendingBrain {
     window.clearTimeout(this.thinkTimer);
     window.clearTimeout(this.answerTimer);
     window.clearInterval(this.talkTimer);
+    window.clearTimeout(this.pauseTimer);
     this.gateOpen = false;
     this.latched = false;
+    this.wake.stop();
     this.mic.stop();
     this.player.stop();
     try { this.session?.close(); } catch { /* already closed */ }
@@ -434,6 +543,11 @@ export class AttendingBrain {
     return true;
   }
 
+  /** The question as shown: the browser's live words if it heard any, otherwise Gemini's transcript. */
+  private shownQuestion(): string {
+    return this.liveQuestion || withoutWakePhrase(this.question.trim());
+  }
+
   private beginTurn(): void {
     if (this.turnActive) return;
     this.turnActive = true;
@@ -467,7 +581,7 @@ export class AttendingBrain {
       this.question += content.inputTranscription.text;
       window.clearTimeout(this.thinkTimer);
       if (this.gateOpen || this.talkMode === 'open') {
-        this.card.wake('listening', this.question.trim());
+        this.card.wake('listening', this.shownQuestion());
         this.setState('hearing');
         // With an open microphone there is no button to say the question is over: assume it is when the
         // words stop arriving.
@@ -481,7 +595,7 @@ export class AttendingBrain {
         }
       } else {
         // The transcript can trail the button: keep "thinking", just fill in the words.
-        this.card.wake('thinking', this.question.trim());
+        this.card.wake('thinking', this.shownQuestion());
       }
     }
 
@@ -500,7 +614,7 @@ export class AttendingBrain {
         window.clearTimeout(this.thinkTimer);
         this.setState('answering');
         // The written card, when the model sends one, is the cleaner text; until then show what it is saying.
-        if (!this.cardShown) this.card.stream(this.answer.trim(), this.question.trim());
+        if (!this.cardShown) this.card.stream(this.answer.trim(), this.shownQuestion());
       }
     }
 
@@ -524,6 +638,7 @@ export class AttendingBrain {
         let response: Record<string, unknown>;
         try {
           response = this.runTool(name, call.args || {});
+          if (!response.error) this.showAction(name, call.args || {});
         } catch (err) {
           response = { error: err instanceof Error ? err.message : 'failed' };
         }
@@ -555,6 +670,14 @@ export class AttendingBrain {
     if (content?.turnComplete) this.endTurn();
   }
 
+  /** Say on the panel what Gemini just did to the screen. */
+  private showAction(name: string, args: Record<string, unknown>): void {
+    let text = ACTION_TEXT[name] || '';
+    if (name === 'highlight_structure') text = `Showing the ${STRUCTURE_TEXT[String(args.structure || '')] || 'structure'}`;
+    if (name === 'go_to_step') text = `Went to the ${String(args.step || '')} step`;
+    if (text) this.card.action(text);
+  }
+
   private runTool(name: string, args: Record<string, unknown>): Record<string, unknown> {
     const host = this.host;
     switch (name) {
@@ -564,7 +687,7 @@ export class AttendingBrain {
         // Only show cards that answer something the trainee actually asked.
         if (this.userSpoke) {
           this.cardShown = true;
-          this.card.say(text, { question: this.question.trim(), title: String(args.title || '').trim(), hold: 0 });
+          this.card.say(text, { question: this.shownQuestion(), title: String(args.title || '').trim(), hold: 0 });
         }
         return { result: 'shown' };
       }

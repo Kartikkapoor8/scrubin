@@ -208,9 +208,9 @@ for (let q = 0; q < QUESTIONS.length; q++) {
   }
   await page.waitForTimeout(1200);
   const card = await page.evaluate(() => ({
-    question: document.querySelector('.attending__question')?.textContent || '',
-    answer: document.querySelector('.attending__text')?.textContent || '',
-    up: document.querySelector('.attending')?.classList.contains('panel--on') || false,
+    question: document.querySelector('.gem__q')?.textContent || '',
+    answer: document.querySelector('.gem__a')?.textContent || '',
+    up: window.__viper.panel.isOnline,
     step: window.__viper.scene.procedure.step.id,
     highlight: window.__viper.scene.highlight.structure,
   }));
@@ -233,6 +233,63 @@ for (let q = 0; q < QUESTIONS.length; q++) {
   if (card.step !== stepBefore) console.log(`   info  the procedure moved: ${stepBefore} -> ${card.step}`);
   if (card.highlight) console.log(`   info  highlighted: ${card.highlight}`);
   await page.waitForTimeout(1500);
+}
+
+// ---- Hands-free: "Hey Gemini" opens the question and a pause ends it. Chrome's recogniser needs a real
+// microphone and Google's speech service, so what it would report is fed in here; everything after that
+// (the turn opening, the audio, the answer, the panel) is the real path.
+{
+  const question = 'how many sutures are planned';
+  console.log(`\nHands-free  "Hey Gemini, ${question}?"`);
+  const pcm = say(`Hey Gemini, ${question}?`);
+  await page.evaluate(() => { const l = window.__askLog; l.heard = ''; l.said = ''; l.audioBytes = 0; l.tools = []; l.turns = 0; });
+  if (dry) {
+    await page.evaluate((heard) => {
+      window.__reply = () => {
+        const brain = window.__viper.brain;
+        brain.handleMessage({ serverContent: { inputTranscription: { text: heard } } });
+        brain.handleMessage({ serverContent: { outputTranscription: { text: 'Five, eight millimetres apart.' } } });
+        brain.handleMessage({ serverContent: { turnComplete: true } });
+      };
+    }, `Hey Gemini, ${question}?`);
+  }
+  const feed = (texts, final) => page.evaluate(({ texts, final }) => window.__viper.brain.wake.feed(texts, final), { texts, final });
+  const talking = () => page.evaluate(() => window.__viper.brain.talking);
+
+  await feed(['so this panel is gemini'], true);
+  check(!(await talking()), 'talk about Gemini does not open a question');
+  await feed(['so this panel is gemini', 'hey gemini'], false);
+  check(await talking(), 'the wake phrase opens a question');
+
+  const chunkBytes = 16000 * 2 * 0.1;
+  const started = Date.now();
+  const words = question.split(' ');
+  for (let off = 0, n = 0; off < pcm.length; off += chunkBytes, n++) {
+    await page.evaluate((data) => window.__viper.brain.injectSpeech(data), pcm.subarray(off, Math.min(pcm.length, off + chunkBytes)).toString('base64'));
+    if (n % 4 === 3) {
+      const said = words.slice(0, Math.max(1, Math.round((off / pcm.length) * words.length))).join(' ');
+      await feed(['so this panel is gemini', `hey gemini ${said}`], false);
+    }
+    const due = started + (n + 1) * 100;
+    if (due > Date.now()) await page.waitForTimeout(due - Date.now());
+  }
+  const live = await page.evaluate(() => document.querySelector('.gem__q')?.textContent || '');
+  check(live.length > 4 && !/gemini/i.test(live), 'the question shows as it is spoken, without the wake phrase', live);
+  await feed(['so this panel is gemini', `hey gemini ${question}`], true);
+  await page.waitForTimeout(900);
+  check(!(await talking()), 'a pause ends the question');
+  await page.evaluate(() => window.__viper.brain.injectSpeech(''));
+
+  const until = Date.now() + 25000;
+  let log = null;
+  while (Date.now() < until) {
+    await page.waitForTimeout(400);
+    log = await page.evaluate(() => ({ ...window.__askLog }));
+    if (log.turns > 0) break;
+  }
+  await page.waitForTimeout(1500);
+  const answer = await page.evaluate(() => document.querySelector('.gem__a')?.textContent || '');
+  check(answer.trim().length > 0, 'answer', answer.trim().slice(0, 140) || 'no answer on the panel');
 }
 
 info = await state();

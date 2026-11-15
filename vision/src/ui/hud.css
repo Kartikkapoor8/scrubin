@@ -1,0 +1,254 @@
+/* The HUD's look and motion. One spring (--spring; ui/motion.ts has the same one for Motion, core/dom.ts
+   for the drawn overlays), one accent bar on every panel, a soft glow instead of hard edges.
+   Type: Space Grotesk for display, Inter for everything read, JetBrains Mono for numbers only.
+   Motion (the library) moves the panels themselves; elements faded by a class are always a wrapper, never
+   the element Motion animates, so the two never fight over the same property. */
+
+:root {
+  /* stiffness 260, damping 26 over 620 ms */
+  --spring: linear(0, 0.06 3.8%, 0.195 7.7%, 0.355 11.5%, 0.511 15.4%, 0.648 19.2%, 0.761 23.1%, 0.847 26.9%, 0.91 30.8%, 0.954 34.6%, 0.982 38.5%, 1 42.3%, 1.009 46.2%, 1.013 50%, 1.014 53.8%, 1.013 57.7%, 1.011 61.5%, 1.008 65.4%, 1.006 69.2%, 1.005 73.1%, 1.003 76.9%, 1.002 80.8%, 1.001 84.6%, 1.001 88.5%, 1 92.3%, 1 96.2%, 1);
+  --spring-ms: 620ms;
+  /* stiffness 520, damping 32 over 450 ms */
+  --pop: linear(0, 0.065 3.8%, 0.212 7.7%, 0.39 11.5%, 0.565 15.4%, 0.717 19.2%, 0.837 23.1%, 0.926 26.9%, 0.986 30.8%, 1.022 34.6%, 1.04 38.5%, 1.045 42.3%, 1.043 46.2%, 1.037 50%, 1.029 53.8%, 1.021 57.7%, 1.014 61.5%, 1.008 65.4%, 1.004 69.2%, 1.001 73.1%, 0.999 76.9%, 0.998 80.8%, 0.998 84.6%, 0.998 88.5%, 0.998 92.3%, 0.999 96.2%, 1);
+  --pop-ms: 450ms;
+  --accent: var(--cyan);
+  --accent-rgb: var(--cyan-rgb);
+}
+
+/* Numbers, wherever they appear. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'zero' 0;
+}
+
+/* Words in the fixed chrome are Inter; only numbers stay monospaced. */
+.brand__sub,
+.corner-label,
+.chip,
+.banner {
+  font-family: var(--font-body);
+}
+.brand__sub { letter-spacing: 0.12em; font-weight: 500; }
+.corner-label { letter-spacing: 0.16em; font-weight: 600; }
+.chip { letter-spacing: 0.08em; font-weight: 600; }
+.banner { letter-spacing: 0.06em; font-weight: 600; }
+
+/* ---------- Glass: every panel ---------- */
+
+.glass {
+  position: relative;
+  background: linear-gradient(180deg, rgba(var(--ink-rgb), 0.56), rgba(var(--ink-rgb), 0.7));
+  border: 1px solid rgba(var(--accent-rgb), 0.24);
+  border-radius: calc(var(--u) * 0.7);
+  backdrop-filter: blur(calc(var(--u) * 1.8)) saturate(1.2);
+  box-shadow:
+    0 calc(var(--u) * 1.4) calc(var(--u) * 4.5) rgba(0, 0, 0, 0.42),
+    0 0 calc(var(--u) * 3.2) rgba(var(--accent-rgb), 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: border-color 420ms ease, box-shadow 420ms ease;
+}
+
+/* The accent bar: a short lit tab on the top edge. */
+.glass::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: calc(var(--u) * 1.8);
+  width: calc(var(--u) * 6.5);
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 calc(var(--u) * 1.1) rgba(var(--accent-rgb), 0.95), 0 0 calc(var(--u) * 0.3) rgba(var(--accent-rgb), 1);
+  transition: background 420ms ease, box-shadow 420ms ease, width var(--spring-ms) var(--spring);
+}
+
+/* A band of light that crosses a panel once as it arrives. */
+.sweep::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.15) 50%, transparent 58%) no-repeat;
+  background-size: 260% 100%;
+  background-position: 140% 0;
+  opacity: 0;
+}
+.sweep--run::after {
+  animation: sweep 1000ms cubic-bezier(0.16, 1, 0.3, 1) 140ms 1 both;
+}
+@keyframes sweep {
+  0% { background-position: 140% 0; opacity: 1; }
+  80% { opacity: 1; }
+  100% { background-position: -40% 0; opacity: 0; }
+}
+
+/* ---------- Gemini (top right) ---------- */
+
+.gem-slot {
+  position: absolute;
+  top: calc(var(--u) * 3.2);
+  right: calc(var(--u) * 3.6);
+  width: calc(var(--u) * 48);
+  transition: opacity 320ms ease;
+}
+/* The opening title has the top of the picture to itself for a few seconds. */
+.hud--title .gem-slot { opacity: 0; }
+
+.gem {
+  padding: calc(var(--u) * 1.5) calc(var(--u) * 2.1) calc(var(--u) * 1.35);
+  will-change: transform, opacity;
+}
+.gem[data-state='listening'] { --accent: var(--green); --accent-rgb: var(--green-rgb); }
+.gem[data-state='thinking'] { --accent: var(--amber); --accent-rgb: var(--amber-rgb); }
+.gem[data-state='listening'],
+.gem[data-state='thinking'],
+.gem[data-state='answering'] {
+  box-shadow:
+    0 calc(var(--u) * 1.4) calc(var(--u) * 4.5) rgba(0, 0, 0, 0.42),
+    0 0 calc(var(--u) * 4.5) rgba(var(--accent-rgb), 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  border-color: rgba(var(--accent-rgb), 0.5);
+}
+.gem[data-state='listening']::before,
+.gem[data-state='thinking']::before,
+.gem[data-state='answering']::before { width: calc(var(--u) * 12); }
+
+.gem__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--u) * 1.2);
+}
+.gem__name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: calc(var(--u) * 3.1);
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: #fff;
+}
+.gem__state {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.8);
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: calc(var(--u) * 1.9);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  transition: color 420ms ease;
+}
+.gem__dot {
+  width: calc(var(--u) * 1.05);
+  height: calc(var(--u) * 1.05);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 calc(var(--u) * 1.1) rgba(var(--accent-rgb), 0.95);
+  transition: background 420ms ease, box-shadow 420ms ease;
+}
+.gem[data-state='listening'] .gem__dot { animation: gem-pulse 1000ms ease-in-out infinite; }
+.gem[data-state='thinking'] .gem__dot { animation: gem-pulse 520ms ease-in-out infinite; }
+@keyframes gem-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.45); }
+}
+
+.gem__wave {
+  display: block;
+  width: 100%;
+  height: calc(var(--u) * 6);
+  margin: calc(var(--u) * 0.5) 0 calc(var(--u) * 0.3);
+}
+
+.gem__body { overflow: hidden; }
+.gem__inner { padding-bottom: calc(var(--u) * 0.2); }
+
+.gem__q {
+  display: none;
+  margin-bottom: calc(var(--u) * 0.7);
+  font-size: calc(var(--u) * 2.45);
+  font-weight: 500;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.74);
+}
+.gem__q--on { display: block; }
+/* While it is being spoken, the question is the main thing on the panel. */
+.gem[data-state='listening'] .gem__q { color: #fff; font-size: calc(var(--u) * 2.8); font-weight: 600; }
+.gem[data-state='listening'] .gem__q::after {
+  content: '';
+  display: inline-block;
+  width: 0.55em;
+  height: 0.12em;
+  margin-left: 0.18em;
+  background: var(--green);
+  animation: blink 700ms steps(2, start) infinite;
+}
+
+.gem__title {
+  display: none;
+  margin-bottom: calc(var(--u) * 0.35);
+  font-size: calc(var(--u) * 1.75);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+.gem__title--on { display: block; }
+
+.gem__a {
+  display: none;
+  font-size: calc(var(--u) * 2.8);
+  font-weight: 600;
+  line-height: 1.24;
+  color: #fff;
+}
+.gem__a--on { display: block; }
+.gem__rest { opacity: 0; }
+.gem__caret {
+  display: none;
+  width: 0.5em;
+  height: 0.95em;
+  margin: 0 0.06em -0.12em 0.08em;
+  background: var(--cyan);
+  box-shadow: 0 0 calc(var(--u) * 0.9) rgba(var(--cyan-rgb), 0.9);
+}
+.gem__a--typing .gem__caret { display: inline-block; }
+
+.gem__action {
+  display: none;
+  margin-top: calc(var(--u) * 0.8);
+  font-size: calc(var(--u) * 1.9);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--cyan);
+}
+.gem__action--on { display: block; }
+.gem__action::before { content: '\2192\00a0\00a0'; }
+
+.gem__hint {
+  display: none;
+  font-size: calc(var(--u) * 2.45);
+  font-weight: 500;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.82);
+}
+.gem__hint--on { display: block; }
+
+.gem__ctx {
+  margin-top: calc(var(--u) * 1);
+  padding-top: calc(var(--u) * 0.95);
+  border-top: 1px solid rgba(255, 255, 255, 0.11);
+  font-size: calc(var(--u) * 2.05);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gem__ctx .num { color: #fff; font-weight: 600; letter-spacing: 0.02em; }
+.gem__ctx:empty { display: none; }
