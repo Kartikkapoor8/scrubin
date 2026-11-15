@@ -58,6 +58,34 @@ export function currentConfig() {
   return cached;
 }
 
+/**
+ * The headset's address as people actually write it. All of these are accepted, matching what the Windows
+ * scripts in tools/ accept:
+ *   HOLOLENS_IP=192.168.1.50            https on 443
+ *   HOLOLENS_IP=192.168.1.50:10443      a port in the address
+ *   HOLOLENS_IP=https://192.168.1.50/   a pasted Device Portal address
+ *   HOLOLENS_SCHEME=http                Device Portal with "SSL connection required" switched off (port 80)
+ *   HOLOLENS_PORT=8443                  the port on its own (used by the local mock)
+ */
+export function parseHeadsetAddress(address, schemeSetting = '', portSetting = '') {
+  let host = address;
+  let scheme = schemeSetting.toLowerCase();
+  const prefix = host.match(/^(https?):\/\//i);
+  if (prefix) {
+    if (!scheme) scheme = prefix[1].toLowerCase();
+    host = host.slice(prefix[0].length);
+  }
+  host = host.replace(/[/?#].*$/, '');
+  let port = Number(portSetting) || 0;
+  const withPort = host.match(/^([^:\[\]]+):(\d+)$/);
+  if (withPort) {
+    host = withPort[1];
+    if (!port) port = Number(withPort[2]);
+  }
+  if (scheme !== 'http') scheme = 'https';
+  return { host, scheme, port: port || (scheme === 'http' ? 80 : 443) };
+}
+
 export function loadEnv() {
   const merged = {};
   for (const file of [...ENV_FILES].reverse()) Object.assign(merged, parseEnvFile(file));
@@ -67,14 +95,16 @@ export function loadEnv() {
   }
 
   const clean = (v) => (typeof v === 'string' ? v.trim() : '');
+  const headset = parseHeadsetAddress(clean(env.HOLOLENS_IP), clean(env.HOLOLENS_SCHEME), clean(env.HOLOLENS_PORT));
   return {
     port: Number(clean(env.VISION_PORT)) || 4747,
     hololens: {
-      ip: clean(env.HOLOLENS_IP),
+      ip: headset.host,
       user: clean(env.HOLOLENS_USER),
       pass: env.HOLOLENS_PASS ?? '',
-      // Only for the local mock (dev/mock-hololens.mjs); a real headset is always https on 443.
-      port: Number(clean(env.HOLOLENS_PORT)) || 443,
+      // https on 443 unless the settings say otherwise (see parseHeadsetAddress).
+      scheme: headset.scheme,
+      port: headset.port,
       certSha256: clean(env.HOLOLENS_CERT_SHA256).replace(/[^0-9a-fA-F]/g, '').toUpperCase(),
     },
     gemini: {

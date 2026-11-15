@@ -183,6 +183,9 @@ the detail. Tell the Mac agent which level it settled on (`__viper.brain` in the
 (`GET https://<ip>/api/holographic/stream/live_high.mp4?holo=true&pv=true&mic=false&loopback=false`).
 
 - The user name and password stay on the server; the page never sees them.
+- `HOLOLENS_IP` takes the address the way the Windows scripts do: `192.168.1.50`, with a port
+  (`192.168.1.50:10443`), or pasted from the browser (`https://192.168.1.50/`). It is https on 443 unless
+  told otherwise; `HOLOLENS_SCHEME=http` is for a headset with "SSL connection required" switched off.
 - The headset's self-signed certificate is accepted for that one address only. Set `HOLOLENS_CERT_SHA256` to
   pin it (the relay prints the fingerprint it saw).
 - Only this Mac can use the app, the stream and the token route. Other devices on the network can reach

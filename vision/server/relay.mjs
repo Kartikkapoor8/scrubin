@@ -12,6 +12,7 @@
 //     verification is never switched off globally. Optionally the certificate can be pinned.
 //   - Bytes are forwarded as they arrive (no buffering, Nagle off) to add as little delay as possible.
 //   - A stalled or dropped upstream ends the response quickly so the page can reconnect.
+import http from 'node:http';
 import https from 'node:https';
 import { spawn, spawnSync } from 'node:child_process';
 
@@ -37,6 +38,7 @@ const STALL_TIMEOUT_MS = 5000;
  * @param recorder    optional: every forwarded byte is also offered to it (see recorder.mjs).
  */
 export function createRelay(getHeadset, recorder = null) {
+  let warnedPlain = false;
   const status = {
     get configured() {
       const hl = getHeadset();
@@ -98,7 +100,13 @@ export function createRelay(getHeadset, recorder = null) {
     let packer = null; // the ffmpeg process, when repackaging
     let packTimer = null;
 
-    const upstream = https.request({
+    // https unless the settings say the headset's Device Portal is serving plain http.
+    const secure = hl.scheme !== 'http';
+    if (!secure && !warnedPlain) {
+      warnedPlain = true;
+      console.warn('[relay] the headset is set to plain http: its login crosses the local network unencrypted.');
+    }
+    const upstream = (secure ? https : http).request({
       host: hl.ip,
       port: hl.port,
       path,
@@ -107,11 +115,10 @@ export function createRelay(getHeadset, recorder = null) {
         Authorization: 'Basic ' + Buffer.from(`${hl.user}:${hl.pass}`).toString('base64'),
         Accept: '*/*',
       },
-      // The headset's certificate is self-signed. Accept it for this one host only.
-      rejectUnauthorized: false,
       agent: false,
       timeout: CONNECT_TIMEOUT_MS,
-      ...tlsOptions(),
+      // The headset's certificate is self-signed. Accept it for this one host only.
+      ...(secure ? { rejectUnauthorized: false, ...tlsOptions() } : {}),
     });
 
     const finish = () => {
@@ -139,6 +146,11 @@ export function createRelay(getHeadset, recorder = null) {
 
     upstream.on('socket', (socket) => {
       socket.setNoDelay(true);
+      if (!secure) {
+        // Plain http: there is no certificate to check.
+        upstream.end();
+        return;
+      }
       socket.once('secureConnect', () => {
         const cert = socket.getPeerCertificate();
         const seen = (cert && cert.fingerprint256 ? cert.fingerprint256 : '').replace(/:/g, '').toUpperCase();
@@ -263,17 +275,17 @@ export function createRelay(getHeadset, recorder = null) {
     return new Promise((resolve) => {
       const hl = getHeadset();
       if (!status.configured) return resolve({ ok: false, error: 'not_configured' });
-      const request = https.request(
+      const secure = hl.scheme !== 'http';
+      const request = (secure ? https : http).request(
         {
           host: hl.ip,
           port: hl.port,
           path: '/api/os/info',
           method: 'GET',
           headers: { Authorization: 'Basic ' + Buffer.from(`${hl.user}:${hl.pass}`).toString('base64') },
-          rejectUnauthorized: false,
           agent: false,
           timeout: 3000,
-          ...tlsOptions(),
+          ...(secure ? { rejectUnauthorized: false, ...tlsOptions() } : {}),
         },
         (up) => {
           up.resume();

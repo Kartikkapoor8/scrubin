@@ -15,6 +15,7 @@
 //   HOLOLENS_IP=127.0.0.1 HOLOLENS_PORT=8443 HOLOLENS_USER=dev HOLOLENS_PASS=dev npm run dev
 //
 // --drop-after N ends every stream after N seconds, to rehearse a dropped connection.
+import http from 'node:http';
 import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -219,7 +220,9 @@ function serveRaw(req, res) {
 
 const authorized = (req) => req.headers.authorization === 'Basic ' + Buffer.from(`${USER}:${PASS}`).toString('base64');
 
-const server = https.createServer({ key: fs.readFileSync(keyFile), cert: fs.readFileSync(certFile) }, (req, res) => {
+// --http: serve plain http, as a headset does with "SSL connection required" switched off.
+const PLAIN = process.argv.includes('--http');
+const handler = (req, res) => {
   if (!authorized(req)) {
     res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Windows Device Portal"' });
     return res.end();
@@ -246,10 +249,13 @@ const server = https.createServer({ key: fs.readFileSync(keyFile), cert: fs.read
   }
   res.writeHead(404);
   res.end();
-});
+};
+const server = PLAIN
+  ? http.createServer(handler)
+  : https.createServer({ key: fs.readFileSync(keyFile), cert: fs.readFileSync(certFile) }, handler);
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`[mock] fake HoloLens Device Portal on https://127.0.0.1:${PORT}  (user "${USER}", password "${PASS}")`);
+  console.log(`[mock] fake HoloLens Device Portal on ${PLAIN ? 'http' : 'https'}://127.0.0.1:${PORT}  (user "${USER}", password "${PASS}")`);
   if (raw) console.log(`[mock] replaying the raw capture${RAW_LOOP ? ' in a loop' : ' once per connection'}`);
   else console.log(`[mock] clip: ${clip}${DROP_AFTER ? `, dropping every ${DROP_AFTER}s` : ''}`);
 });
