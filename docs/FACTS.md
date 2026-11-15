@@ -61,14 +61,16 @@ server, 1,200 in its test and tooling scripts; 22 C# files (about 4,200 lines) i
 | Same, with longer fragments | about 0.25 s average (0.1 to 0.47 s) | Mock, about 300 ms fragments |
 | Lag probe accuracy | within 10 ms | Self-test with made-up delays of 850, 1730 and 120 ms |
 | Glass-to-glass delay, real headset | TBD | `Shift`+`Y` in the morning (per preset) |
-| Stream drop mid-run, back to live | 0.2 s | Mock dropping the connection; step and last frame kept |
+| Stream drop mid-run, back to live | 0.1 to 0.2 s | Mock dropping the connection; step and last frame kept |
 | Headset unreachable at launch, switch to webcam | 8.3 s, with a banner saying why | App left to choose its input, headset address unanswered |
-| Network lost silently, back after it returns | 1.9 s after the headset is back | Mock frozen, then killed, then restarted |
+| Network lost silently: on screen as "Waiting for the headset" | 2.1 s | Mock frozen (no reset sent), banner and drained picture |
+| Network back: picture back | 2.2 s after the headset returns | Mock killed, then restarted |
 | Gemini unreachable or key rejected | demo unaffected | Procedure and sutures carry on; the attending retries |
-| Page reload, picture back | 0.37 s, settings kept | Mid-run reload on the mock |
-| 30 resets in a row, then a full run | TBD | `node vision/dev/drills.mjs --only resets` |
+| Page reload, picture back | 0.3 to 0.4 s, settings kept | Mid-run reload on the mock |
+| 30 resets in a row, then a full run | passes; page elements 274 before, 288 after | `node vision/dev/drills.mjs --only resets`; the full run took 53 s |
 | 90 minutes of continuous runs | TBD | `node vision/dev/drills.mjs --soak 90` (memory, CPU, frame rate every minute) |
-| Frame rate through a full run | TBD | Headless Chrome on the Mac, every overlay on |
+| Frame rate through a full run | 60 fps in every step; 1 slow frame in 3,425 (the key press that starts autoplay) | `node vision/dev/profile.mjs`, 1920x1080 at 2x, mock headset input, production build, headless Chrome on the Mac; before the wound tracker read only a window: 25 slow frames (0.8%) |
+| Wound analysis per video frame | about 1 ms (was about 4 ms) | Same run; only a window round the tracked wound is read back from the GPU |
 
 Not measured on real hardware yet: the HoloLens stream delay, wound tracking and hands on real headset
 footage with the holographic body in view, a real Gemini session (no key was on the build Mac overnight).
