@@ -681,7 +681,8 @@ export class AttendingBrain {
         }
         const functionResponse: FunctionResponse = { id: call.id, name, response };
         // Tools that only change the screen need no spoken follow-up.
-        if (this.compat === 0 && SILENT_TOOLS.has(name)) (functionResponse as { scheduling?: string }).scheduling = 'SILENT';
+        // (A refusal is different: the model should say why it did not happen.)
+        if (this.compat === 0 && SILENT_TOOLS.has(name) && !response.error) (functionResponse as { scheduling?: string }).scheduling = 'SILENT';
         responses.push(functionResponse);
       }
       try {
@@ -742,9 +743,10 @@ export class AttendingBrain {
       }
       case 'get_procedure_state':
         return host.stateData();
-      case 'next_step':
-        host.nextStep();
-        return { result: 'ok', state: host.stateData() };
+      case 'next_step': {
+        const refused = host.nextStep();
+        return refused ? { error: refused, state: host.stateData() } : { result: 'ok', state: host.stateData() };
+      }
       case 'previous_step':
         host.previousStep();
         return { result: 'ok', state: host.stateData() };
@@ -752,7 +754,10 @@ export class AttendingBrain {
         host.repeatStep();
         return { result: 'ok', state: host.stateData() };
       case 'go_to_step':
-        return host.goToStep(String(args.step || '')) ? { result: 'ok', state: host.stateData() } : { error: 'unknown step' };
+      {
+        const refused = host.goToStep(String(args.step || ''));
+        return refused ? { error: refused, state: host.stateData() } : { result: 'ok', state: host.stateData() };
+      }
       default:
         return { error: `unknown tool ${name}` };
     }

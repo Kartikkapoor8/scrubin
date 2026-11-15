@@ -102,7 +102,7 @@ whether or not it is aligned.
 |------|------------------------|
 | Ready | The wound is found and bracketed: "Wound locked". |
 | Scan | A scan line sweeps the picture; a second pass leaves contour arcs over the arm. |
-| Assess | The wound is measured: extension lines, a dimension line, "42 mm". |
+| Assess | The wound's length is drawn on it: extension lines, a dimension line, "42 mm". This is the marker line's known length as set in VIPER Vision (it is also what gives every overlay its scale); it is not measured from the picture. |
 | Anatomy | The view moves in on the wound. A scan line crosses a window around it and what lies underneath appears behind the line: the radial and ulnar arteries in red with blood pulsing toward the hand and the median nerve in yellow, each named at the end of the window, and a superficial vein in blue (not named). A hatched red **danger zone** marks the radial artery beside the wound. Nothing is drawn away from the wound: the headset's holographic body is already in the picture. |
 | Plan | Five numbered targets with entry and exit points, the 8 mm spacing ruler, the 5 mm bite. The view zooms in. |
 | Stitch | One suture per press: the target tightens, a curved needle passes under the wound, the thread is pulled flat, the knot pops, the suture turns green with a burst, the measured gap to the last suture is drawn under it, and a card confirms it: "Suture 3/5 · Spacing 7.9 mm ✓ · Depth ✓" with a one-line comment. |
@@ -140,6 +140,8 @@ context. Without a session the panel is simply not there; the demo runs the same
   replaced by a written answer when it sends one.
 - **The key stays on the server.** The page asks `POST /api/gemini-token` for an ephemeral token each time it
   opens a session: single use, two minutes to start a session, thirty to talk, locked to that model.
+- **What it cannot do:** place a suture or skip one. Asked to move on while sutures are still to be placed,
+  it is told how many remain and says so; only the operator's keys place sutures.
 - **What it can do (tools):** `show_answer_card`, `highlight_structure` (radial artery, ulnar artery, veins,
   median nerve, flexor tendons, danger zone, wound), `look_at_view` (it is sent the current picture with the
   overlays, so it can answer "what am I looking at?"), `get_procedure_state`, `next_step`, `previous_step`,
@@ -273,21 +275,9 @@ the tracker.
 
 ## Before going on stage
 
-0. `node dev/preflight.mjs` (with the app running): about twenty seconds, and it says whether the settings,
-   the headset, the stream's format and the Gemini key are in order, and what to fix. It samples
-   `live_high`, `live_med` and `live_low` in turn and prints each one's picture size, fragment length (the
-   delay the headset adds before anything can be shown), bit rate and time to first byte. It never prints
-   an address, a login or a key.
-1. `npm run build && npm start`, open http://localhost:4747 in Chrome, press `F`.
-2. Press `1` (HoloLens). If the chip does not go green in a few seconds, `2` (webcam) or `3` (a recorded clip in
-   `vision/media/`) or `4` (simulated arm) keep the show going; `1` again retries.
-3. Check the chip says **Wound locked** with the real marker under the real light. If it does not: `K` and
-   click the marker line; `D` shows what the tracker sees.
-4. Step to Anatomy and Plan once. If the anatomy is mirrored or back to front for where the patient sits,
-   press `Z` or `X`. If targets look too wide or too narrow across the arm, `[` or `]`. These are remembered.
-5. Hold `G`, ask one question, let go, wait for the answer. `R` to reset. You are ready.
-6. Pair the presenter, or open the phone remote (`?` shows its address and PIN), and press Next once from
-   where you will stand.
+Follow [`docs/MORNING.md`](../docs/MORNING.md): ten minutes from a cold start to demo-ready at the table
+(power, hotspot, the headset app, `vision/.env.local`, preflight before the page is open, the lag sweep, one
+full run, the backup clip), with a symptom-to-fix table. It is the one checklist; this file does not repeat it.
 
 If something goes wrong mid-demo: `R` resets the procedure, `H` shows the clean picture, and reloading the
 page takes about two seconds (settings are kept).

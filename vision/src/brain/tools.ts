@@ -11,10 +11,12 @@ export interface BrainHost {
   /** Where the procedure is, in plain language, for the model. */
   describeState(): string;
   stateData(): Record<string, unknown>;
-  nextStep(): void;
+  /** Moves on. Returns '' when it did, or the reason it could not (for the model to say). */
+  nextStep(): string;
   previousStep(): void;
   repeatStep(): void;
-  goToStep(step: string): boolean;
+  /** Jumps to a step. Returns '' when it did, or the reason it could not. */
+  goToStep(step: string): string;
   highlight(structure: Structure): void;
   /** The picture the audience sees right now (video + overlays) as a base64 JPEG, or null. */
   captureView(): string | null;
@@ -32,7 +34,8 @@ const PROMPT_TOOLS = `
 - If the trainee asks about a structure in the arm (an artery, a vein, the nerve, the tendons, the danger zone, the wound), call highlight_structure for it and name it in your answer.
 - If they ask what they are looking at, what you can see, or anything about the picture, call look_at_view first and answer from what it shows.
 - If they ask where they are in the procedure, what comes next, or how they are doing, call get_procedure_state first.
-- If they ask to move on, go back, repeat a step or jump to a step, call the matching tool and confirm in a few words.`;
+- If they ask to move on, go back, repeat a step or jump to a step, call the matching tool and confirm in a few words.
+- You cannot place sutures or skip them: the trainee places each one. If a tool answers that sutures remain, say how many are left instead of moving on.`;
 
 const PROMPT_REST = `
 - Messages that start with [state] come from the app, not from the trainee. They tell you where the procedure is. Never reply to them and never mention them.

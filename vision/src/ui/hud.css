@@ -601,7 +601,7 @@
 }
 .debrief__big small { font-size: var(--t-md); font-weight: 500; color: rgba(255, 255, 255, 0.66); }
 .debrief__kicker {
-  font-size: var(--t-sm);
+  font-size: var(--t-md);
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -619,8 +619,9 @@
   padding-left: calc(var(--u) * 3.2);
   border-left: 1px solid rgba(255, 255, 255, 0.13);
 }
+/* Read from two metres like the values they name: a bare "0:37" says nothing. */
 .debrief__key {
-  font-size: var(--t-sm);
+  font-size: var(--t-md);
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;

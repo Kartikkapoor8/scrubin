@@ -35,8 +35,11 @@ export class WoundLockLayer implements Layer {
       const dots = '.'.repeat(1 + (Math.floor(t * 2) % 3));
       // With no picture yet the thing being waited for is the picture, not the wound.
       const input = this.scene.input;
+      // "Connecting" only while it is; a headset that cannot be reached as set up is simply waited for
+      // (the operator's banner says why).
       const waiting = input.live ? 'LOOKING FOR THE WOUND'
-        : input.label === 'HoloLens' ? 'CONNECTING TO THE HEADSET' : 'WAITING FOR THE PICTURE';
+        : input.label !== 'HoloLens' ? 'WAITING FOR THE PICTURE'
+        : input.unavailable ? 'WAITING FOR THE HEADSET' : 'CONNECTING TO THE HEADSET';
       text(ctx, `${waiting}${dots.padEnd(3, ' ')}`, frame.width / 2, frame.height * 0.84, {
         size: 16, color: C.cyan, alpha: this.searching * (0.7 + 0.25 * Math.sin(t * 2.4)), font: 'body', tracking: 0.2, weight: 700, plate: 1,
       });

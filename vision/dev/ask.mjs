@@ -318,6 +318,24 @@ for (let q = 0; q < QUESTIONS.length; q++) {
   check(answer.trim().length > 0, 'answer', answer.trim().slice(0, 140) || 'no answer on the panel');
 }
 
+// ---- Gemini moves between steps but never places or skips a suture. (Stand-in only: a made-up tool call
+// cannot be answered to the real session.)
+if (dry) {
+  console.log('\nSutures cannot be skipped');
+  const tool = (name, args = {}) => page.evaluate(({ name, args }) => {
+    window.__viper.brain.handleMessage({ toolCall: { functionCalls: [{ id: 'skip', name, args }] } });
+    const p = window.__viper.scene.procedure;
+    return { step: p.step.id, done: p.stitchesDone };
+  }, { name, args });
+  await page.evaluate(() => window.__viper.scene.procedure.goToId('stitch'));
+  let now = await tool('next_step');
+  check(now.step === 'stitch' && now.done === 0, 'next_step with sutures still to place is refused', `${now.step}, ${now.done} placed`);
+  now = await tool('go_to_step', { step: 'complete' });
+  check(now.step === 'stitch' && now.done === 0, 'go_to_step complete with sutures still to place is refused', `${now.step}, ${now.done} placed`);
+  now = await tool('previous_step');
+  check(now.step === 'plan', 'going back still works', now.step);
+}
+
 info = await state();
 console.log(`\nEnded at compatibility level ${info.level}, state "${info.state}".`);
 const problems = [...new Set(consoleLines)].filter((l) => /warn|error/i.test(l)).slice(-10);

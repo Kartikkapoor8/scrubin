@@ -130,7 +130,7 @@ async function boot(): Promise<void> {
     aligned: false,
     toolDistanceMm: -1,
     attract: false,
-    input: { live: false, label: '' },
+    input: { live: false, label: '', unavailable: false },
     relockAt: -1e9,
     keepOut: [],
     highlight: { structure: '', until: 0 },
@@ -190,6 +190,7 @@ async function boot(): Promise<void> {
   // ----- The Gemini attending -----
   let appTime = 0;
   const viewCanvas = document.createElement('canvas');
+  const suturesRemain = () => `Not done: ${procedure.count - procedure.stitchesDone} of ${procedure.count} sutures are still to be placed. The trainee places each one; you cannot place or skip them.`;
   const brainHost: BrainHost = {
     describeState: () => {
       const step = procedure.step;
@@ -209,13 +210,20 @@ async function boot(): Promise<void> {
       woundTracked: tracker.pose.locked,
       handOnTarget: scene.aligned,
     }),
-    nextStep: () => procedure.next(),
+    // Gemini moves between steps; it never places a suture and never skips one. Asked to move on while
+    // sutures are still to be placed, it is told why not (and says so) instead of faking a finished repair.
+    nextStep: () => {
+      if (procedure.step.id === 'stitch' && procedure.stitchesDone < procedure.count) return suturesRemain();
+      procedure.next();
+      return '';
+    },
     previousStep: () => procedure.back(),
     repeatStep: () => procedure.replay(),
     goToStep: (id) => {
-      if (!procedure.steps.some((s) => s.id === id)) return false;
+      if (!procedure.steps.some((s) => s.id === id)) return 'There is no step with that name.';
+      if (id === 'complete' && procedure.stitchesDone < procedure.count) return suturesRemain();
       procedure.goToId(id as StepId);
-      return true;
+      return '';
     },
     highlight: (structure: Structure) => {
       scene.highlight = { structure, until: appTime + 7 };
@@ -363,7 +371,7 @@ async function boot(): Promise<void> {
   const input = new InputManager(video, { hololens: config.hololens.configured }, (snapshot) => {
     hud.setInput(snapshot);
     stage.classList.toggle('stage--stale', snapshot.status.state !== 'live');
-    scene.input = { live: snapshot.status.state === 'live', label: snapshot.label };
+    scene.input = { live: snapshot.status.state === 'live', label: snapshot.label, unavailable: snapshot.status.state === 'unavailable' };
   });
 
   const picker = el('input');
