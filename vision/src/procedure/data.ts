@@ -27,6 +27,8 @@ export const PROCEDURE = {
     cta: 'Press Next to begin',
   },
   debrief: { kicker: 'Debrief', title: 'Wound closed', depth: 'In range' },
+  /** The one instruction the Gemini panel shows with the auto-annotation (scripted: it has to be instant). */
+  annotateLine: 'Start distal. 5 simple interrupted sutures, 8 mm apart.',
   /** The Ready card's instruction once the wound has been found (before that it is the standby step's line). */
   readyLocked: 'Wound found. Press Next to begin.',
   patient: { name: 'Training Patient 01', procedure: 'Laceration repair', site: 'R forearm' },

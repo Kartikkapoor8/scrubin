@@ -190,7 +190,8 @@ is in the browser console. Tell the Mac agent which level it settled on (`__vipe
 | `K` / `Shift` + `M` / `J` | Pick the marker colour by clicking it / step through colour presets / ignore holograms on or off |
 | `M` | Arm mode on / off (the backup demo, below) |
 | `D` | Debug view of the tracker |
-| `Y` | Sync clock, for measuring how far the headset's picture trails real life |
+| `Y` | Auto-annotate the tracked line now: a white line over it, then its labels (it also fires by itself after 3 s of steady tracking in Ready; `?annotate=0` turns that off, `?annotate=5` changes the wait). `R` clears it |
+| `L` / `Shift` + `L` | Sync clock and lag probe / send Gemini the current picture |
 | `-` / `=` | Suture trigger delay, down / up 0.1 s (HoloLens input only; remembered) |
 | `T` | Zoom toward the wound while planning and stitching: on / off |
 | `F` / `O` | Full screen / fill the screen or show the whole picture |

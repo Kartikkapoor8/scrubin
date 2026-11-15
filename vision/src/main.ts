@@ -17,6 +17,7 @@ import { connectRemote } from './app/remote';
 import { AttendingBrain } from './brain/live';
 import type { BrainHost, Structure } from './brain/tools';
 import { AnatomyLayer } from './overlay/layers/anatomy';
+import { AnnotateLayer } from './overlay/layers/annotate';
 import { setReadability } from './overlay/draw';
 import { DebugLayer } from './overlay/layers/debug';
 import { HandLayer } from './overlay/layers/hand';
@@ -26,7 +27,7 @@ import { ScanLayer } from './overlay/layers/scan';
 import { StitchLayer } from './overlay/layers/stitch';
 import { WoundLockLayer } from './overlay/layers/wound';
 import { OverlayRenderer } from './overlay/renderer';
-import type { StepId } from './procedure/data';
+import { PROCEDURE, type StepId } from './procedure/data';
 import { Procedure } from './procedure/machine';
 import { HandTracker } from './tracking/hands';
 import { loadMarker, MARKER_PRESETS, markerFromSample, saveMarker, WoundDetector, WoundTracker } from './tracking/wound';
@@ -66,7 +67,8 @@ const KEYS: Array<[string, string]> = [
   ['N', 'Sound on / off'],
   ['G', 'Talk to Gemini: hold and speak, or tap and speak (Shift+G turns Gemini off / on)'],
   ['V', 'Gemini speaks its answers aloud: on / off'],
-  ['L', 'Send Gemini the current picture'],
+  ['Shift L', 'Send Gemini the current picture'],
+  ['Y', 'Auto-annotate the tracked line now (it also fires by itself after 3 s of steady tracking in Ready)'],
   ['1 2 3 4', 'Input: HoloLens / webcam / video file / simulated arm'],
   ['C', 'Record the raw HoloLens stream to vision/media (C again stops; Shift+C records 60 s)'],
   ['M', 'Arm mode on / off: the backup demo on a bare forearm (also ?mode=arm)'],
@@ -79,7 +81,7 @@ const KEYS: Array<[string, string]> = [
   ['F', 'Full screen'],
   ['O', 'Fill the screen / show the whole picture'],
   ['D', 'Tracking debug view'],
-  ['Y', 'Sync clock and lag probe: look at this screen through the headset; the lag is measured for you'],
+  ['L', 'Sync clock and lag probe: look at this screen through the headset; the lag is measured for you'],
   ['Shift Y', 'Latency sweep: measures live_high, live_med and live_low (headset looking at this screen), keeps the fastest'],
   ['Q', 'Headset stream preset: high / med / low (remembered)'],
   ['- =', 'Suture trigger delay, to match that lag (HoloLens input only)'],
@@ -144,6 +146,10 @@ async function boot(): Promise<void> {
   renderer.add(new StitchLayer(scene));
   renderer.add(new HandLayer(scene));
   renderer.add(new DebugLayer(scene));
+  // Auto-annotate (key Y, or by itself on a steadily tracked line): drawn over everything else.
+  const annotate = new AnnotateLayer(scene);
+  const annotateAfter = Number(params.get('annotate') ?? '3');
+  annotate.autoAfter = Number.isFinite(annotateAfter) ? annotateAfter : 3;
 
   const rail = new StepPanel(hud.root, procedure);
   // Table mode: lines and lettering on the picture are drawn larger, to carry to someone two metres away.
@@ -266,6 +272,18 @@ async function boot(): Promise<void> {
     else if (state === 'thinking') brainChip.set('Gemini thinking', 'ok');
     else brainChip.set('Gemini speaking', 'ok');
   });
+  // Auto-annotate brings one scripted instruction onto the Gemini panel (no Live call: it has to be instant).
+  let panelForAnnotate = false;
+  annotate.onShow = () => {
+    if (!attending.isOnline) { attending.setOnline(true); panelForAnnotate = true; }
+    attending.say(PROCEDURE.annotateLine, { hold: 0 });
+  };
+  annotate.onClear = () => {
+    attending.hide();
+    if (panelForAnnotate && !brain.ready) attending.setOnline(false);
+    panelForAnnotate = false;
+  };
+  procedure.on((event) => { if (event.type === 'step' && event.step.id !== 'standby') annotate.clear(false); });
   if (params.get('voice') === '0') brain.voice = false;
   if (params.get('wake') === '0') brain.wakeEnabled = false;
   if (params.get('turns') === 'manual') brain.markTurns = true;
@@ -313,6 +331,7 @@ async function boot(): Promise<void> {
     for (const timer of waiting) window.clearTimeout(timer);
     waiting.clear();
     procedure.setAutoplay(false);
+    annotate.clear(false);
     procedure.reset();
     arm.reset();
     brain.silence();
@@ -479,6 +498,10 @@ async function boot(): Promise<void> {
       // screen and compare the clock with its own image), - and = set it.
       case 'y': case 'Y':
         if (event.shiftKey) { void latencySweep(); break; }
+        annotate.trigger();
+        break;
+      case 'l': case 'L':
+        if (event.shiftKey) { hud.notice(brain.sendView() ? 'Picture sent to Gemini' : 'Gemini is not connected', 1500); break; }
         syncClock.classList.toggle('sync-clock--on');
         if (syncClock.classList.contains('sync-clock--on')) probe.start();
         else if (!sweeping) { probe.stop(); sweepText = ''; }
@@ -509,7 +532,6 @@ async function boot(): Promise<void> {
         break;
       case 'n': case 'N': sounds.muted = !sounds.muted; hud.notice(`Sound ${sounds.muted ? 'off' : 'on'}`, 1500); break;
       case 'v': case 'V': brain.voice = !brain.voice; hud.notice(`Attending voice ${brain.voice ? 'on' : 'off'}`, 1500); break;
-      case 'l': case 'L': hud.notice(brain.sendView() ? 'Picture sent to the attending' : 'The attending is not connected', 1500); break;
       case '1': input.choose('hololens'); break;
       case '2': input.choose('webcam'); break;
       case '3': chooseFile(); break;
@@ -798,7 +820,8 @@ async function boot(): Promise<void> {
     view.setSize(stage.clientWidth, stage.clientHeight, video.videoWidth, video.videoHeight);
     // How much of the screen's width the wound should fill in each step, and the most to zoom for it.
     const framing: Partial<Record<StepId, [number, number]>> = { assess: [0.15, 1.6], anatomy: [0.2, 2], plan: [0.24, 2.2], stitch: [0.24, 2.2], complete: [0.2, 2] };
-    const frameFor = framing[step];
+    // Auto-annotate moves in on the line too, so its labels have room.
+    const frameFor = annotate.showing ? ([0.25, 2.4] as [number, number]) : framing[step];
     if (settings.autoZoom && !scene.hidden && pose.locked && frameFor) {
       const desired = clamp((stage.clientWidth * frameFor[0]) / Math.max(1, pose.length * view.baseScale), 1, frameFor[1]);
       if (Math.abs(desired - zoomTarget) > 0.12 || zoomTarget === 1) zoomTarget = desired;
@@ -846,8 +869,18 @@ async function boot(): Promise<void> {
     }
 
     renderer.resize(stage.clientWidth, stage.clientHeight);
+    // Auto-annotate: by itself only while standing by on a live picture; while it is up, the procedure's
+    // own overlays step aside and the idle screen stays away.
+    annotate.update(t, !arm.active && !procedure.autoplay && procedure.step.id === 'standby' && scene.input.live && !scene.hidden);
+    if (annotate.showing) lastActivity = now;
     if (arm.active) arm.draw(t, dt);
-    else renderer.draw(t, dt, view);
+    else {
+      const hiddenByUser = scene.hidden;
+      if (annotate.showing) scene.hidden = true;
+      renderer.draw(t, dt, view);
+      scene.hidden = hiddenByUser;
+      if (!hiddenByUser) renderer.drawOver(annotate, t, dt, view);
+    }
     stage.classList.toggle('stage--idle', now - lastPointer > 2500 && !picking);
 
     if (pose.locked && !wasLocked && step === 'standby') sounds.lock();

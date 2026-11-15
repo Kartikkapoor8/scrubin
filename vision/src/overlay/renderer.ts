@@ -76,4 +76,17 @@ export class OverlayRenderer {
       ctx.clearRect(0, 0, this.width, this.height);
     }
   }
+
+  /** Draw one more layer on top of what draw() left (not part of the stack, never blanked by a reset). */
+  drawOver(layer: Layer, t: number, dt: number, view: Viewport): void {
+    const ctx = this.ctx;
+    ctx.setTransform(this.ratio, 0, 0, this.ratio, 0, 0);
+    ctx.save();
+    try {
+      layer.draw({ ctx, t, dt, view, width: this.width, height: this.height });
+    } catch (err) {
+      console.error('[overlay] a layer failed to draw', err);
+    }
+    ctx.restore();
+  }
 }
