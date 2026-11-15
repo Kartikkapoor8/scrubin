@@ -72,7 +72,8 @@ const KEYS: Array<[string, string]> = [
   ['1 2 3 4', 'Input: HoloLens / webcam / video file / simulated arm'],
   ['C', 'Record the raw HoloLens stream to vision/media (C again stops; Shift+C records 60 s)'],
   ['M', 'Arm mode on / off: the backup demo on a bare forearm (also ?mode=arm)'],
-  ['K', 'Pick the marker colour: press K, then click the marker line'],
+  ['K', 'Scan, then annotate the green line (K again clears)'],
+  ['Shift K', 'Pick the marker colour: press Shift+K, then click the marker line'],
   ['Shift M', 'Next marker colour preset (green, magenta, blue, orange)'],
   ['J', 'Ink only (default) / also track a glowing hologram line as the wound'],
   ['X  Z', 'Flip which end is suture 1 / which side is the far side'],
@@ -354,31 +355,30 @@ async function boot(): Promise<void> {
     renderer.blackout(appTime + 0.6);
     touch();
   };
-  const oneButton = params.get('steps') !== '1';
   let scanning = false;
   const actions = {
     /** The one button: the next suture if there is one to place, otherwise the next step; after the score, start over. */
     next: () => {
       touch();
-      // One button (demo day): from Ready it scans, then annotates the line; pressed again it clears.
-      if (!arm.active && oneButton) {
-        if (annotate.showing || scanning) { resetNow(); return; }
-        if (procedure.step.id === 'standby') {
-          scanning = true;
-          procedure.goToId('scan');
-          window.setTimeout(() => {
-            if (!scanning) return;
-            scanning = false;
-            procedure.reset();
-            annotate.trigger();
-          }, 4200);
-          return;
-        }
-      }
       if (arm.active) arm.next();
       else if (procedure.step.id === 'complete') resetNow();
       else if (placesSuture()) afterLag(() => procedure.advance());
       else if (waiting.size === 0) procedure.advance();
+    },
+    /** Key K: scan, then annotate the line; pressed again it clears. Space stays the normal Next. */
+    scanAndAnnotate: () => {
+      touch();
+      if (arm.active) return;
+      if (annotate.showing || scanning) { resetNow(); return; }
+      resetNow();
+      scanning = true;
+      procedure.goToId('scan');
+      window.setTimeout(() => {
+        if (!scanning) return;
+        scanning = false;
+        procedure.reset();
+        annotate.trigger();
+      }, 4200);
     },
     stitch: () => {
       touch();
@@ -502,7 +502,7 @@ async function boot(): Promise<void> {
     sounds.unlock();
     touch();
     // Keys that only mean something to the table demo (sutures, autoplay, marker colour, flips, zoom) do nothing in Arm mode.
-    if (arm.active && 'sSaAkKjJxXzZ[]tT'.includes(event.key)) { event.preventDefault(); return; }
+    if (arm.active && 'sSaAjJxXzZ[]tT'.includes(event.key)) { event.preventDefault(); return; }
     switch (event.key) {
       // Space, and a presenter's forward button (PageDown, or the right arrow on some), are the one button:
       // the next suture if there is one to place, otherwise the next step. Shift + right arrow skips ahead.
@@ -566,7 +566,7 @@ async function boot(): Promise<void> {
       case '3': chooseFile(); break;
       case '4': input.choose('sim'); break;
       case 'c': case 'C': void recording.toggle(event.shiftKey ? 60 : 0); break;
-      case 'k': case 'K': setPicking(!picking); break;
+      case 'k': case 'K': if (event.shiftKey) setPicking(!picking); else actions.scanAndAnnotate(); break;
       case 'm': case 'M': {
         if (!event.shiftKey) {
           // Arm mode on or off. Either way the screen starts clean.
