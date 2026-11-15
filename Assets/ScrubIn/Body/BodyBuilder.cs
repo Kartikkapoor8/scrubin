@@ -29,6 +29,7 @@ namespace ScrubIn
 
         // ---- Colors (bright, warm, no green) ----------------------------------------------------------------
         public static readonly Color SkinColor = Palette.Hex(0xFFD9C2);
+        public static readonly Color ShellColor = Palette.Hex(0x8FC4FF);   // ice blue hologram (no green)
         public static readonly Color MuscleColor = Palette.Hex(0xFF6B5A);
         public static readonly Color BoneColor = Palette.Bone;
 
@@ -48,8 +49,8 @@ namespace ScrubIn
                     bool skin = p.Layer == BodyLayer.Skin;
                     switch (mode)
                     {
-                        case BodyMode.Skin:
-                            p.SetMode(skin, 1f, skin);
+                        case BodyMode.Skin:   // translucent shell with the skeleton visible inside
+                            p.SetMode(skin || p.Layer == BodyLayer.Skeleton, skin ? 1f : 0.6f, skin);
                             break;
                         case BodyMode.Muscles:
                             p.SetMode(skin || p.Layer == BodyLayer.Muscle, skin ? 0.22f : 1f, !skin);
@@ -89,7 +90,13 @@ namespace ScrubIn
             _organMat.name = "BodyOrgan";
 
             Transform skin = Group("Skin"), muscle = Group("Muscles"), bone = Group("Skeleton"), organ = Group("Organs");
-            BuildSkin(skin);
+            if (BuildHumanShell(skin))
+            {
+                _skinMat = HoloMaterials.Solid(ShellColor, 1f, 0.035f, 2.4f);
+                _skinMat.name = "BodyShell";
+                skin.GetChild(0).GetComponent<MeshRenderer>().sharedMaterial = _skinMat;
+            }
+            else BuildSkin(skin);
             BuildMuscles(muscle);
             BuildSkeleton(bone);
             BuildOrgans(organ);
@@ -110,6 +117,37 @@ namespace ScrubIn
         static float TorsoHalfH(float x) { return Profile(x, new[] { 0.02f, 0.10f, 0.20f, 0.32f, 0.44f, 0.56f }, new[] { 0.095f, 0.098f, 0.088f, 0.100f, 0.108f, 0.085f }); }
         static float TorsoCY(float x) { return T + TorsoHalfH(x); }
         static float TorsoTop(float x) { return TorsoCY(x) + TorsoHalfH(x); }
+
+        // Real human mesh: MakeHuman base mesh (CC0), converted by tools/body/make_shell.py into the patient frame
+        // (right wrist at the origin, back at y = 0, arms at the sides, surgical window already cut).
+        static bool BuildHumanShell(Transform g)
+        {
+            TextAsset ta = Resources.Load<TextAsset>("HumanShell");
+            if (ta == null) { ScrubInLog.Warn("HumanShell mesh missing; using the procedural skin."); return false; }
+            try
+            {
+                byte[] b = ta.bytes;
+                int nv = BitConverter.ToInt32(b, 0), nt = BitConverter.ToInt32(b, 4), o = 8;
+                Vector3[] v = new Vector3[nv];
+                for (int i = 0; i < nv; i++, o += 12)
+                    v[i] = new Vector3(BitConverter.ToSingle(b, o), BitConverter.ToSingle(b, o + 4) + T, BitConverter.ToSingle(b, o + 8));
+                int[] tri = new int[nt * 3];
+                for (int i = 0; i < tri.Length; i++, o += 2) tri[i] = BitConverter.ToUInt16(b, o);
+                Mesh m = new Mesh();
+                m.name = "HumanShell";
+                m.vertices = v;
+                m.triangles = tri;
+                m.RecalculateNormals();
+                m.RecalculateBounds();
+                Part(g, BodyLayer.Skin, "Body", ShellColor, 1f, m);
+                return g.childCount > 0;
+            }
+            catch (Exception e)
+            {
+                ScrubInLog.Warn("HumanShell mesh unreadable (" + e.Message + "); using the procedural skin.");
+                return false;
+            }
+        }
 
         static void BuildSkin(Transform g)
         {

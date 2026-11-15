@@ -15,7 +15,7 @@ namespace ScrubIn
     ///
     /// Placing: the body follows your gaze (sitting on a real table when spatial mapping finds one) until an air
     ///   tap puts it down. Tap-and-hold and drag: starting on the body moves it, starting off it rotates it.
-    ///   Voice: "bigger", "smaller", "up", "down", "reset" ("turn left" / "turn right" too).
+    ///   Voice: "bigger", "smaller", "raise", "lower" (or "up", "down"), "reset" ("turn left" / "turn right" too).
     /// Exploring: the part under your gaze (or under your hand, when HoloLens can see it) glows. An air tap selects
     ///   it: stronger glow + a small name tag. Tap empty space to clear. Voice: "skin", "muscles", "skeleton",
     ///   "organs", "x-ray".
@@ -28,6 +28,7 @@ namespace ScrubIn
         const int BodyMask = 1 << 0;
         const float LabelCap = 0.011f;
         const float LabelLift = 0.045f;
+        static readonly Vector3 BodyCenterLocal = new Vector3(0.2f, 0.05f, -0.24f);
 
         ScrubInContext _ctx;
         HoloInput _input;
@@ -178,7 +179,8 @@ namespace ScrubIn
             UpdateHover();
             UpdateSurfaceTarget();
             UpdateKeys();
-            if (_input != null) _input.FocusPoint = _hover != null ? _model.Root.TransformPoint(_hoverPointLocal) : (Vector3?)null;
+            // Stabilisation plane on the body: the gazed point, else the middle of the torso.
+            if (_input != null) _input.FocusPoint = _model.Root.TransformPoint(_hover != null ? _hoverPointLocal : BodyCenterLocal);
         }
 
         void LateUpdate()
@@ -224,15 +226,34 @@ namespace ScrubIn
             if (!_ctx.IsHeadset || a.Locked || !a.Following) { if (!a.Locked) a.SurfaceTarget = null; return; }
             RaycastHit info;
             Transform head = _ctx.Head;
+            float below;
             if (Physics.Raycast(head.position, head.forward, out info, 2.5f, 1 << SpatialLayer, QueryTriggerInteraction.Ignore)
-                && info.normal.y > 0.8f && info.distance > 0.35f)
+                && info.normal.y > 0.8f && info.distance > 0.35f
+                && (below = head.position.y - info.point.y) > 0.3f && below < 1.3f)
             {
                 a.SurfaceTarget = info.point;
+            }
+            else if (ProbeDown(head, out info))
+            {
+                a.SurfaceTarget = info.point;   // the surface under where the body would float
             }
             else
             {
                 a.SurfaceTarget = null;
             }
+        }
+
+        // Spatial-mapping ray straight down through the point where the gaze meets the virtual table.
+        bool ProbeDown(Transform head, out RaycastHit info)
+        {
+            Vector3 flat = _ctx.Alignment.FlatForward();
+            float pitch = Mathf.Clamp(Mathf.Asin(Mathf.Clamp(-head.forward.y, -1f, 1f)) * Mathf.Rad2Deg, 15f, 65f);
+            float d = Mathf.Clamp(PatientAlignment.TableBelowHead / Mathf.Tan(pitch * Mathf.Deg2Rad), 0.55f, 1.4f);
+            Vector3 start = head.position + flat * d + Vector3.down * 0.2f;
+            if (Physics.Raycast(start, Vector3.down, out info, 1.1f, 1 << SpatialLayer, QueryTriggerInteraction.Ignore)
+                && info.normal.y > 0.8f)
+                return true;
+            return false;
         }
 
         void UpdateKeys()
@@ -243,6 +264,8 @@ namespace ScrubIn
             if (Input.GetKeyDown(KeyCode.F4)) SetMode(BodyMode.Organs);
             if (Input.GetKeyDown(KeyCode.F5)) SetMode(BodyMode.XRay);
             if (Input.GetKeyDown(KeyCode.F6)) ResetAll();
+            if (Input.GetKeyDown(KeyCode.PageUp)) RaiseBody(0.03f);
+            if (Input.GetKeyDown(KeyCode.PageDown)) RaiseBody(-0.03f);
             if (Input.GetKeyDown(KeyCode.KeypadPlus) || Input.GetKeyDown(KeyCode.Equals)) ScaleBody(1.15f);
             if (Input.GetKeyDown(KeyCode.KeypadMinus) || Input.GetKeyDown(KeyCode.Minus)) ScaleBody(1f / 1.15f);
             if (!_ctx.IsHeadset && Input.GetMouseButtonDown(0) && _input != null) _input.Tap();
@@ -277,6 +300,8 @@ namespace ScrubIn
                 { "x ray", () => SetMode(BodyMode.XRay) },
                 { "bigger", () => ScaleBody(1.15f) },
                 { "smaller", () => ScaleBody(1f / 1.15f) },
+                { "raise", () => RaiseBody(0.03f) },
+                { "lower", () => RaiseBody(-0.03f) },
                 { "up", () => RaiseBody(0.03f) },
                 { "down", () => RaiseBody(-0.03f) },
                 { "turn left", () => TurnBody(15f) },

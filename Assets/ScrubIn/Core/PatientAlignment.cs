@@ -16,6 +16,8 @@ namespace ScrubIn
     {
         public const float SpawnDistance = 0.7f;   // meters in front of the head
         public const float SpawnDrop = 0.45f;      // meters below the head
+        /// <summary>With no real table found, the virtual table top sits this far below the head.</summary>
+        public const float TableBelowHead = 0.75f;
         public const float MinScale = 0.25f;   // "smaller" down to a tabletop model
         public const float MaxScale = 1.6f;
 
@@ -80,7 +82,7 @@ namespace ScrubIn
         public void PlaceInFrontOfHead()
         {
             Vector3 forward = FlatForward();
-            PivotWorld = _head.position + forward * SpawnDistance + Vector3.down * SpawnDrop;
+            PivotWorld = _head.position + forward * SpawnDistance + Vector3.down * (TableBelowHead + ForearmShape.TableY * Scale);
             Yaw = Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg;
             Pitch = 0f;
             Roll = 0f;
@@ -184,7 +186,9 @@ namespace ScrubIn
             float pitch = Mathf.Clamp(pitchDown, FollowMinPitch, FollowMaxPitch);
             Vector3 direction = Quaternion.AngleAxis(pitch, right) * flat;
 
-            Vector3 targetPivot = _head.position + direction * FollowDistance;
+            // No real table: a virtual table 0.75 m below the head, at the point where the gaze meets it.
+            float d = Mathf.Clamp(TableBelowHead / Mathf.Tan(pitch * Mathf.Deg2Rad), 0.55f, 1.4f);
+            Vector3 targetPivot = _head.position + flat * d + Vector3.down * (TableBelowHead + ForearmShape.TableY * Scale);
             // A real table under the gaze: rest the arm on it (the wound skin sits -TableY above the table).
             if (SurfaceTarget.HasValue) targetPivot = SurfaceTarget.Value + Vector3.up * (-ForearmShape.TableY * Scale);
             float targetYaw = Mathf.Atan2(flat.x, flat.z) * Mathf.Rad2Deg;

@@ -49,6 +49,61 @@ function Find-MSBuild {
     throw 'No VS 2019/2022 MSBuild found. Run tools\doctor.ps1.'
 }
 
+# IL2CPP (Unity 2019.4) compiles GameAssembly.dll with whatever `vswhere -latest` returns, ignoring PlatformToolset.
+# With VS 2026 Build Tools installed that is MSVC 14.5x, whose STL needs a 14.40+ C++ runtime; the HoloLens gets
+# VCLibs 14.0.33519 (14.38), so VIPER crashed ~1 s after launch (log stops after "Started listening"). While MSBuild
+# runs, an elevated helper (one UAC prompt) moves every VS >= 17 instance registration out of the setup catalog so
+# IL2CPP falls back to VS 2019 (14.29), then moves it back -- when the build ends, fails, or this process dies.
+$script:VSHidden = $null
+function Hide-NewerVS {
+    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+    $all = & $vswhere -all -products * -format json | ConvertFrom-Json
+    if (-not ($all | Where-Object { ([version]$_.installationVersion).Major -eq 16 })) { return }   # no VS 2019: nothing to fall back to
+    $ids = @($all | Where-Object { ([version]$_.installationVersion).Major -ge 17 } | ForEach-Object instanceId)
+    if (-not $ids) { return }
+    $tag = [guid]::NewGuid().ToString('N')
+    $ready = Join-Path $env:TEMP "scrubin-vs-$tag.ready"; $done = Join-Path $env:TEMP "scrubin-vs-$tag.done"
+    $helper = Join-Path $env:TEMP 'scrubin-hide-vs.ps1'
+    Set-Content $helper -Encoding UTF8 -Value @'
+param([int]$ParentPid, [string]$Ids, [string]$Ready, [string]$Done)
+$inst = 'C:\ProgramData\Microsoft\VisualStudio\Packages\_Instances'
+$hid  = 'C:\ProgramData\Microsoft\VisualStudio\Packages\_Instances.scrubin-hidden'
+try {
+    New-Item -ItemType Directory -Force $hid | Out-Null
+    foreach ($id in $Ids -split ',') { if (Test-Path "$inst\$id") { Move-Item "$inst\$id" "$hid\$id" -Force } }
+    Set-Content $Ready 'ok'
+    while (-not (Test-Path $Done) -and (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) { Start-Sleep -Milliseconds 500 }
+} catch { Set-Content $Ready "error: $($_.Exception.Message)" }
+finally {
+    # Restore everything in the hidden folder (also leftovers from an earlier interrupted build).
+    Get-ChildItem $hid -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+        if (-not (Test-Path "$inst\$($_.Name)")) { Move-Item $_.FullName "$inst\$($_.Name)" -Force } }
+    Remove-Item $hid -Force -ErrorAction SilentlyContinue
+}
+'@
+    Write-Host "      hiding VS >= 2022 from IL2CPP for this build (approve the Windows admin prompt)" -ForegroundColor DarkGray
+    $proc = Start-Process powershell -Verb RunAs -WindowStyle Hidden -PassThru -ArgumentList @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$helper`"",
+        '-ParentPid', $PID, '-Ids', ($ids -join ','), '-Ready', "`"$ready`"", '-Done', "`"$done`"")
+    $deadline = (Get-Date).AddSeconds(60)
+    while (-not (Test-Path $ready)) {
+        if ($proc.HasExited -or (Get-Date) -gt $deadline) { throw 'Could not hide VS 2026 from IL2CPP (admin prompt declined or timed out).' }
+        Start-Sleep -Milliseconds 300
+    }
+    $r = (Get-Content $ready -Raw).Trim(); Remove-Item $ready -Force
+    $script:VSHidden = @{ Proc = $proc; Done = $done }
+    if ($r -ne 'ok') { Show-NewerVS; throw "Could not hide VS 2026 from IL2CPP: $r" }
+    $latest = & $vswhere -latest -products * -property installationVersion
+    Write-Host "      IL2CPP will use VS $latest" -ForegroundColor DarkGray
+}
+function Show-NewerVS {
+    if (-not $script:VSHidden) { return }
+    Set-Content $script:VSHidden.Done 'done'
+    $null = $script:VSHidden.Proc.WaitForExit(30000)
+    Remove-Item $script:VSHidden.Done -Force -ErrorAction SilentlyContinue
+    $script:VSHidden = $null
+}
+
 # ---- 1+2: Unity -> UWP solution
 if (-not $SkipUnity) {
     if (Test-ProjectOpen) { throw "The project is open in the Unity Editor. Close Unity (File > Exit) and re-run, or use the menu 'ScrubIn/Build HoloLens (x86)' then: tools\build.ps1 -SkipUnity" }
@@ -67,6 +122,16 @@ if (-not $SkipUnity) {
         Write-Host '--- last Unity log lines ---' -ForegroundColor Yellow
         Get-Content $log -Tail 40 | ForEach-Object { Write-Host $_ }
         throw "Unity build failed (exit $($p.ExitCode)). Full log: $log"
+    }
+    # Unity exits 0 without building when its licence is rejected (e.g. Wi-Fi "random hardware addresses" on,
+    # so the MAC no longer matches the activation). Without this check the old solution got repackaged silently.
+    if (-not (Select-String -Path $log -Pattern '\[ScrubIn\] Build Succeeded' -Quiet)) {
+        Write-Host '--- last Unity log lines ---' -ForegroundColor Yellow
+        Get-Content $log -Tail 25 | ForEach-Object { Write-Host $_ }
+        if (Select-String -Path $log -Pattern 'Machine binding|not been activated' -Quiet) {
+            throw "Unity licence rejected (machine binding). Turn OFF Settings > Network & internet > Wi-Fi > Manage known networks > <this network> > Random hardware addresses, reconnect, re-run."
+        }
+        throw "Unity did not build (no '[ScrubIn] Build Succeeded' in the log). Full log: $log"
     }
     Write-Host ("      Unity done in {0:mm\:ss}" -f $sw.Elapsed) -ForegroundColor DarkGray
 }
@@ -116,7 +181,8 @@ $mbArgs = @($sln.FullName, '/m', '/nologo', '/v:minimal',
             # Native C++ either way; point the lookup at the installed 4.8 pack.
             '/p:TargetFrameworkVersion=v4.8')
 if ($mb.Toolset) { $mbArgs += "/p:PlatformToolset=$($mb.Toolset)" }
-& $mb.Path @mbArgs
+if ($mb.Toolset -eq 'v142') { Hide-NewerVS }
+try { & $mb.Path @mbArgs } finally { Show-NewerVS }
 if ($LASTEXITCODE -ne 0) { throw "MSBuild failed (exit $LASTEXITCODE)." }
 
 $pkg = Get-ChildItem $OutDir -Recurse -Include *.appx, *.appxbundle -File |
