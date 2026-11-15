@@ -149,7 +149,8 @@ async function boot(): Promise<void> {
   // Auto-annotate (key Y, or by itself on a steadily tracked line): drawn over everything else.
   const annotate = new AnnotateLayer(scene);
   const annotateAfter = Number(params.get('annotate') ?? '3');
-  annotate.autoAfter = Number.isFinite(annotateAfter) ? annotateAfter : 3;
+  // One-button demo: the button starts it, so it does not fire by itself unless ?annotate= asks for that.
+  annotate.autoAfter = params.get('annotate') === null && params.get('steps') !== '1' ? 0 : Number.isFinite(annotateAfter) ? annotateAfter : 3;
 
   const rail = new StepPanel(hud.root, procedure);
   // Table mode: lines and lettering on the picture are drawn larger, to carry to someone two metres away.
@@ -340,6 +341,7 @@ async function boot(): Promise<void> {
     // Back to Ready at once: no fades, nothing left on screen from the last group.
     for (const timer of waiting) window.clearTimeout(timer);
     waiting.clear();
+    scanning = false;
     procedure.setAutoplay(false);
     annotate.clear(false);
     procedure.reset();
@@ -352,10 +354,27 @@ async function boot(): Promise<void> {
     renderer.blackout(appTime + 0.6);
     touch();
   };
+  const oneButton = params.get('steps') !== '1';
+  let scanning = false;
   const actions = {
     /** The one button: the next suture if there is one to place, otherwise the next step; after the score, start over. */
     next: () => {
       touch();
+      // One button (demo day): from Ready it scans, then annotates the line; pressed again it clears.
+      if (!arm.active && oneButton) {
+        if (annotate.showing || scanning) { resetNow(); return; }
+        if (procedure.step.id === 'standby') {
+          scanning = true;
+          procedure.goToId('scan');
+          window.setTimeout(() => {
+            if (!scanning) return;
+            scanning = false;
+            procedure.reset();
+            annotate.trigger();
+          }, 4200);
+          return;
+        }
+      }
       if (arm.active) arm.next();
       else if (procedure.step.id === 'complete') resetNow();
       else if (placesSuture()) afterLag(() => procedure.advance());

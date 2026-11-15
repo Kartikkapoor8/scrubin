@@ -18,13 +18,13 @@ export interface MarkerSettings {
 export const MARKER_PRESETS: Record<string, MarkerSettings> = {
   // Narrow on purpose: the picture also contains holograms (cyan, mint green, white) and whatever is on the
   // table. Only the marker's own green may pass. Pick the real marker with K to centre this on it.
-  green: { hue: 126, hueTolerance: 20, minSaturation: 0.45, minValue: 0.28, lengthMm: 42 },
+  green: { hue: 126, hueTolerance: 30, minSaturation: 0.33, minValue: 0.2, lengthMm: 42 },
   magenta: { hue: 318, hueTolerance: 20, minSaturation: 0.45, minValue: 0.3, lengthMm: 42 },
   blue: { hue: 222, hueTolerance: 18, minSaturation: 0.5, minValue: 0.25, lengthMm: 42 },
   orange: { hue: 24, hueTolerance: 12, minSaturation: 0.62, minValue: 0.45, lengthMm: 42 },
 };
 
-const STORAGE_KEY = 'viper.marker.v1';
+const STORAGE_KEY = 'viper.marker.v2';
 
 export function loadMarker(): MarkerSettings {
   try {
@@ -259,7 +259,7 @@ export class WoundDetector {
       const long = Math.sqrt(12 * l1);
       // A marker stroke: long and thin, solid (not a sparse scatter or an outline), of a plausible size.
       const solid = n / Math.max(1, long * thick);
-      if (elongation < 4.5 || thick > maxThickness || long < w * 0.022 || long > w * 0.4 || solid < 0.45) {
+      if (elongation < 2.8 || thick > maxThickness * 1.5 || long < w * 0.018 || long > w * 0.5 || solid < 0.32) {
         report.notLine++;
         continue;
       }
@@ -339,7 +339,7 @@ export class WoundDetector {
     const length = hi - lo + 1;
     const thickness = Math.max(1, Math.sqrt(12 * best.l2));
     const elongation = Math.sqrt(best.l1 / best.l2);
-    const quality = clamp((elongation - 4.5) / 5, 0, 1) * clamp(best.n / (minPixels * 3), 0, 1);
+    const quality = clamp((elongation - 2.2) / 3, 0, 1) * clamp(best.n / (minPixels * 3), 0, 1);
 
     this.finish(started);
     this.lastFound = length * scale > 14;
