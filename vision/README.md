@@ -242,6 +242,9 @@ the tracker.
 
 ## Before going on stage
 
+0. `node dev/preflight.mjs` (with the app running): ten seconds, and it says whether the settings, the
+   headset, the stream's format and the Gemini key are in order, and what to fix. It never prints an
+   address, a login or a key.
 1. `npm run build && npm start`, open http://localhost:4747 in Chrome, press `F`.
 2. Press `1` (HoloLens). If the chip does not go green in a few seconds, `2` (webcam) or `3` (a recorded clip in
    `vision/media/`) or `4` (simulated arm) keep the show going; `1` again retries.
@@ -267,4 +270,4 @@ page takes about two seconds (settings are kept).
 | `src/overlay/` | The canvas overlays: glow primitives, wound space, one file per layer in `layers/`. |
 | `src/ui/` | The DOM panels: brand and chips, step panel, vitals, captions (Attending card), feedback line, score card, title, idle screen. |
 | `src/brain/` | The Gemini attending: microphone, Live session, tools. |
-| `dev/` | Mock HoloLens Device Portal (and raw replay of a capture), the headless screenshot script, the spoken-question test for the attending. |
+| `dev/` | Mock HoloLens Device Portal (and raw replay of a capture), the headless screenshot script, the spoken-question test for the attending, the preflight check. |
