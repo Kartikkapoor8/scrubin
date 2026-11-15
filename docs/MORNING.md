@@ -15,6 +15,7 @@ Everything below runs on the Mac unless it says laptop or headset. Times are cum
 ## 0:00 Power, focus, network (2 min)
 
 1. Mac on power. In a terminal: `caffeinate -dims &` (keeps the Mac awake). Focus: Do Not Disturb on.
+   Chrome: `chrome://settings/performance`, **Energy Saver off** (on battery it caps the page at 30 fps).
 2. Laptop: `tools\run hotspot on -FiveGHz`. The HoloLens and the Mac join that hotspot (both remember it).
 3. Laptop: `tools\run hotspot find -Save` prints the HoloLens address (it is also saved on the laptop).
 4. On the Mac, open any website: Gemini and "Hey Gemini" (Chrome's speech recognition) need internet, which
