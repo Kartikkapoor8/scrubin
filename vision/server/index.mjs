@@ -127,7 +127,8 @@ const server = http.createServer(async (req, res) => {
 
     if (vite) return vite.middlewares(req, res, () => json(res, 404, { error: 'not_found' }));
 
-    const dist = path.join(VISION_ROOT, 'dist');
+    // VISION_DIST serves another build folder (dev/drills.mjs tests a private build while the app is being edited).
+    const dist = process.env.VISION_DIST ? path.resolve(VISION_ROOT, process.env.VISION_DIST) : path.join(VISION_ROOT, 'dist');
     let file = safeJoin(dist, decodeURIComponent(url.pathname));
     if (!file) return json(res, 404, { error: 'not_found' });
     if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(dist, 'index.html');

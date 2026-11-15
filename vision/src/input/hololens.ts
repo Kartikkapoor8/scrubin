@@ -304,6 +304,9 @@ export class HoloLensSource implements InputSource {
     let lastTime = -1;
     let lastStallAt = -1e9;
     let lastEnd = 0;
+    // When the newest picture last moved on, and whether the screen has been told the headset went quiet.
+    let grewAt = performance.now();
+    let quiet = false;
     const lags: Array<{ at: number; lag: number }> = [];
     const onWaiting = () => {
       if (!announced) return;
@@ -323,6 +326,16 @@ export class HoloLensSource implements InputSource {
         // A fragment landed: how much picture it carried, roughly.
         if (lastEnd > 0) stats.fragmentMs += ((end - lastEnd) * 1000 - stats.fragmentMs) * 0.2;
         lastEnd = end;
+        grewAt = now;
+        if (quiet) {
+          quiet = false;
+          this.onStatus({ state: 'live', detail: '' });
+        }
+      } else if (announced && !quiet && !document.hidden && now - grewAt > 2000) {
+        // Nothing new for two seconds: say so now (the picture holds, drained) rather than when the
+        // connection finally gives up. The relay drops a silent connection after 3.5 s and this reconnects.
+        quiet = true;
+        this.onStatus({ state: 'reconnecting', detail: 'Waiting for the headset' });
       }
       lags.push({ at: now, lag });
       while (lags.length && now - lags[0].at > 3000) lags.shift();

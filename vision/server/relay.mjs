@@ -30,7 +30,8 @@ function hasFfmpeg() {
   return ffmpegFound;
 }
 const CONNECT_TIMEOUT_MS = 6000;
-const STALL_TIMEOUT_MS = 5000;
+// A headset that has gone quiet (Wi-Fi lost without a goodbye) is given up on after this long, then retried.
+const STALL_TIMEOUT_MS = 3500;
 
 /**
  * @param getHeadset  returns the current headset settings ({ ip, user, pass, port, certSha256 }); read on
