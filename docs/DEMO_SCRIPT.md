@@ -1,5 +1,7 @@
 # VIPER demo script
 
+(Facts updated 2026-11-15 05:10 for the final build: no vitals panel; the Gemini panel is top right; talk with "Hey Gemini" or by holding `Space` or the clicker's talk button. For setting up, follow `docs/MORNING.md`.)
+
 Two things to deliver: a 90-second live demo and a demo video. Spoken lines are left blank for Kartik.
 
 The audience watches **VIPER Vision** on the big screen: the wearer's own point of view, streamed from the
@@ -31,7 +33,7 @@ only a light holographic forearm on the patient's arm.
    the marker line. (`D` shows what the tracker sees.)
 5. Step through once with the space bar. If the anatomy is mirrored for where the patient is sitting, press
    `Z`; if wrist and elbow are swapped, `X`; if targets are too wide across the arm, `[`.
-6. Press `G` (allow the microphone), ask one question, wait for the Attending card. Press `R`.
+6. Say "Hey Gemini" and ask one question (or hold `Space` or the clicker's talk button while asking); allow the microphone if Chrome asks; wait for the answer in the Gemini panel (top right). Press `R`.
 7. Leave it on "Standing by" until it is time.
 
 Fallbacks, in order, if the stream will not come up: `2` webcam pointed at the arm, `3` a recorded clip from
@@ -43,9 +45,9 @@ Fallbacks, in order, if the stream will not come up: `2` webcam pointed at the a
 |------|------|----------|------------------------|-------------|
 | 0:00 | Hook | (nothing) | The wearer's live view of a real arm; "Wound locked" brackets on the marker line |  |
 | 0:08 | Scan | `Space` | A scan line sweeps the picture; contour arcs appear along the arm |  |
-| 0:16 | Assess | `Space` | The wound is measured, "42 mm"; vitals come up with a live ECG |  |
+| 0:16 | Assess | `Space` | A dimension line marks the wound's known 42 mm (the marker's length sets the scale) |  |
 | 0:26 | Anatomy | `Space` | Arteries pulsing, veins, nerve, tendons, labelled; the red danger zone beside the wound |  |
-| 0:34 | Ask | (wearer speaks) | Wearer asks out loud, e.g. "What's that artery?" The question appears on the Attending card, the radial artery lights up, the answer types out |  |
+| 0:34 | Ask | (wearer speaks) | Wearer says "Hey Gemini, what's that artery?" The question appears in the Gemini panel, the radial artery lights up, the answer types out and is spoken |  |
 | 0:46 | Plan | `Space` | The view moves in; five numbered targets, entry and exit points, 8 mm ruler, 5 mm bite |  |
 | 0:54 | Stitch 1 | `Space`, `Space` | (first press enters the step) Needle through, thread pulled flat, knot, green burst, "Suture 1/5 · bite 5 mm ✓ · depth ✓" |  |
 | 1:00 | Stitch 2–4 | `Space` ×3 | Three more, a beat apart; the attending comments on each; "Aligned" when the wearer's fingertip is on the target |  |
@@ -88,7 +90,7 @@ Shot list. Record more than you need; each shot at least twice.
 | 1 | Wide establishing: table, patient's arm, wearer stepping in | Phone or camera on a tripod, landscape | Hook |  |
 | 2 | Close-up: the green marker laceration on the bare arm | Phone, steady | Hook |  |
 | 3 | VIPER Vision: wound locks, scan sweep | Screen recording | Scan |  |
-| 4 | VIPER Vision: measurement and vitals | Screen recording | Assess |  |
+| 4 | VIPER Vision: the 42 mm dimension line | Screen recording | Assess |  |
 | 5 | VIPER Vision: anatomy reveal, then the spoken question and the answer card | Screen recording, live microphone | Anatomy + attending |  |
 | 6 | VIPER Vision: the plan appearing as the view moves in | Screen recording | Plan |  |
 | 7 | VIPER Vision: one full stitch, then all five | Screen recording | Stitch (the money shot) |  |

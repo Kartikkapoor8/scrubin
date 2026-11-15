@@ -1,10 +1,10 @@
-# Morning: cold start to demo-ready in 10 minutes
+# Morning: cold start to demo-ready in about 12 minutes
 
 Demo day, Sunday 2026-11-15. Devpost closes 11:15 AM; table judging after that (small groups of judges about
 2 m from the Mac screen, about 2 minutes each). The Mac runs **VIPER Vision** (the screen the judges watch);
 the Windows laptop runs the hotspot and installed the HoloLens app; the HoloLens shows the holographic body.
 
-Everything below runs on the Mac unless it says laptop or headset. Times are cumulative (about 11 minutes).
+Everything below runs on the Mac unless it says laptop or headset. Times are cumulative (about 12 minutes).
 
 ## Pack (night before)
 
@@ -38,8 +38,10 @@ Everything below runs on the Mac unless it says laptop or headset. Times are cum
 
 8. Make sure no old server holds port 4747 (last night's development server may still be running):
    `lsof -nP -iTCP:4747 -sTCP:LISTEN`. If anything is listed, stop it (`Ctrl`+`C` in its terminal, or
-   `kill $(lsof -ti tcp:4747)`). Then `cd ~/hack/ScrubIn/vision && npm run build && npm start`. (If 4747 is
-   still taken, `npm start` now says so and stops.)
+   `kill $(lsof -ti tcp:4747 -sTCP:LISTEN)`; the `-sTCP:LISTEN` matters, without it Chrome's network process
+   is killed too). Then `cd ~/hack/ScrubIn/vision && npm run build && npm start`. (If 4747 is still taken,
+   `npm start` says so and stops. If the build fails on a type error, `npm start` alone serves the last good
+   build.)
 
 ## 0:05 Preflight, before opening the page (30 s)
 
@@ -72,8 +74,8 @@ Everything below runs on the Mac unless it says laptop or headset. Times are cum
 
 14. The forearm with the green line is in view: the chip says **Wound locked**. If it says
     **Searching for wound**, press `K` and click the green line on screen.
-15. Next (the clicker's forward button, `→` or `Space`) through: Scan, Assess, Anatomy, Plan, five sutures,
-    the debrief. One press per suture: wait for the knot before the next (a press during a stitch is
+15. Next (the clicker's forward button, `→` or `Space`) through: Scan, Assess, Under the skin, Plan, Suture
+    (one press to enter it), five sutures (one press each), the debrief: eleven presses from Ready. One press per suture: wait for the knot before the next (a press during a stitch is
     ignored). With Gemini up, a `Space` press held longer than a third of a second becomes a question, so
     use the clicker or `→` for Next. Ask Gemini one question (say "Hey Gemini, what's that artery?", or hold
     the clicker's talk button or `Space`) and wait for the spoken answer. `R` resets instantly.
@@ -83,7 +85,8 @@ Everything below runs on the Mac unless it says laptop or headset. Times are cum
 16. With the marked forearm and the body in view and the wearer still, press `Shift`+`C`: it records exactly
     60 s of the headset stream to `vision/media/`. Wait for **Saved media/hololens-... · 60 s**, then press
     `3` once to see the clip play, and `1` to go back to the headset. If the headset dies during judging,
-    `3` runs the whole demo on that clip. If no clip was saved, `3` only says so: the backup is then `4`
+    `3` runs the whole demo on that clip (tell the judges it is a recording). If no clip was saved, `3` only
+    says so: the backup is then `4`
     (the simulated arm, which needs nothing). B-roll for the video is in `vision/media/broll/` (its
     `README.txt` says what each file is). `?clean=1` hides the chips and operator notices (for screen
     recordings); at the table leave it off.
@@ -92,8 +95,12 @@ Everything below runs on the Mac unless it says laptop or headset. Times are cum
 
 - Each group of judges: `R`, then Next. After 8 quiet seconds in Ready the idle screen comes up; any key
   clears it. A finished run resets itself after 45 s, and a run left untouched for 3 minutes does too.
-- Phone remote: `?` shows its address and PIN (same Wi-Fi). Buttons: Next, Hold to talk, Back, Reset. The
-  PIN changes at every server start unless `VISION_REMOTE_PIN=1234` is in `vision/.env.local`.
+- Phone remote: `?` shows its address and PIN (the phone joins the laptop's hotspot, like the Mac). Buttons:
+  Next, Hold to talk, Back, Reset. The PIN changes at every server start unless `VISION_REMOTE_PIN=1234` is in
+  `vision/.env.local`.
+- If a judge asks what is measured: the wound's position, direction and length are tracked live from the
+  green line, and the 42 mm is the line's known length, which sets the scale. Each suture is placed by the
+  operator's press; the spacing and depth shown are the plan's values, not measurements.
 
 ---
 
@@ -101,11 +108,12 @@ Everything below runs on the Mac unless it says laptop or headset. Times are cum
 
 | What you see | What to do |
 |---|---|
-| `npm start` says port 4747 is already in use | An old server holds it (often last night's `npm run dev`): `Ctrl`+`C` it, or `kill $(lsof -ti tcp:4747)`, then `npm start`. |
-| Chip **No signal · HoloLens**, banner "Set HOLOLENS_IP, HOLOLENS_USER and HOLOLENS_PASS" | Fill in `vision/.env.local` (step 7), then `Cmd`+`R` the page. |
-| Banner "The headset rejected the user name or password" | The Device Portal login in `vision/.env.local` is wrong. |
+| `npm start` says port 4747 is already in use | An old server holds it (often last night's `npm run dev`): `Ctrl`+`C` it, or `kill $(lsof -ti tcp:4747 -sTCP:LISTEN)`, then `npm start`. |
+| Chip **No signal · HoloLens**, banner "Set HOLOLENS_IP, HOLOLENS_USER and HOLOLENS_PASS" | Fill in `vision/.env.local` (step 7); `HOLOLENS_IP` still holding the template's `192.168.137.xxx` counts as not set. The page picks it up within a few seconds. |
+| Banner "The headset rejected the user name or password" | The Device Portal login in `vision/.env.local` is wrong. Fix it and save: the page tries again every 3 s by itself. |
+| Banner "The headset address in vision/.env.local is not valid" | `HOLOLENS_IP` is mistyped: use the address from step 3. |
 | Banner "Reconnecting to HoloLens · The headset did not answer..." | The headset is asleep or off the hotspot. Wake it; laptop `tools\run hotspot status`; the Mac must be on the same hotspot. Meanwhile `3` (backup clip) or `4` (simulated arm) keeps the show going; `1` goes back. |
-| Banner "...Is Device Portal on and is another capture already running?" | Something else is pulling the stream: close Device Portal's live preview, `tools\run spectate` or `tools\run record` on the laptop. |
+| Banner "The headset refused the stream. Is Device Portal on, and is something else already showing it?" | Something else is pulling the stream: close Device Portal's live preview, `tools\run spectate` or `tools\run record` on the laptop. |
 | The picture trails real life badly | `Shift`+`Y` again (step 12), or `Q` to step through the presets by hand. Put the hotspot on 5 GHz. Reload (`Cmd`+`R`, about 2 s; settings are kept). |
 | Picture frozen with **Reconnecting** for more than 10 s | It retries by itself. If not: `1` again, then restart the VIPER app on the headset. Backup: `3`. |
 | **Searching for wound** | `K`, then click the green line. More even light. `D` shows what the tracker sees (`D` again hides it). |
@@ -113,12 +121,13 @@ Everything below runs on the Mac unless it says laptop or headset. Times are cum
 | Suture targets too wide or narrow across the arm | `[` / `]` (remembered). |
 | The Gemini panel (top right) is missing | No Gemini session: the chip says why (**Gemini connecting**, or **Gemini offline** after three failed tries; it keeps retrying). The demo runs without it. Internet on the Mac (step 4)? `GEMINI_API_KEY` set? `Shift`+`G` turns Gemini off and on. |
 | Gemini does not answer | Chrome must have microphone permission (lock icon in the address bar). Chip states: ready, listening, thinking, speaking. |
-| Chip **Gemini off** | There was no key when the page loaded: `Cmd`+`R` the page (or `Shift`+`G`). |
+| Chip **Gemini off**, or **Gemini offline** right after a talk press with a "Gemini is off" notice | There was no key when the page loaded: add it, then `Cmd`+`R` the page (or `Shift`+`G`). |
+| Chip stays on **Gemini connecting** after the page opens | Press `G` once (Chrome can hold audio back until the first key press). |
 | Banner "Gemini is not available right now" | Google refused the session several times and the app stopped trying. `Cmd`+`Option`+`J` (Chrome's console) shows Google's reason; `Shift`+`G` tries again. While Gemini is down, do not press the talk buttons. |
 | "Hey Gemini" is not picked up | The panel's hint says **Say “Hey Gemini”** when the wake phrase is working and **Hold Space and ask** when it is not (it needs Chrome and the internet). Either way: hold `Space` or the clicker's talk button while asking. `?wake=0` in the address turns the wake phrase off. |
 | Gemini does not hear the question | Hold the clicker's talk button (or `G` or `Space`) while speaking. |
 | Anything odd on screen | `R` (instant reset). Still odd: reload (`Cmd`+`R`). |
-| The Mac app is dead | `npm start` again in `vision/`, reopen the page (step 11). The phone remote's PIN will have changed (see Ready). Raw view for the judges meanwhile: laptop `tools\run spectate`, and close it again before pressing `1`. |
+| The Mac app is dead (banner "Reconnecting to HoloLens · The local relay is not answering") | `npm start` again in `vision/`; the page comes back by itself within about 7 s (reopen it, step 11, only if it does not). The phone remote's PIN will have changed (see Ready). Raw view for the judges meanwhile: laptop `tools\run spectate`, and close it again before pressing `1`. |
 | `Shift`+`C` says to play the headset stream first while the picture is live | Press `1` once (a fresh connection), then `Shift`+`C` again. |
 | Operator key list | `?` |
 
