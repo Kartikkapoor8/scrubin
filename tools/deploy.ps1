@@ -58,8 +58,26 @@ function Uninstall-Rest($old) {
 
 # Default: update in place (faster; build.ps1 bumps the version every build). The running app is stopped
 # first. If the device rejects the update (e.g. signing cert changed), uninstall and install once more.
+# One web session for the whole deploy. Device Portal sets CSRF-Token with no Path attribute, so the cookie is
+# scoped to the directory of whatever URL handed it out. Priming with /api/os/info scoped it to /api/os/, so it
+# was never sent (or echoed as X-CSRF-Token) on /api/app/... and the upload got HTTP 403. Prime with GET / instead
+# so the cookie covers every path, then every Invoke-DP call and the upload reuse this session.
+function Initialize-DPSession {
+    # "auto-" usernames are Device Portal's CSRF-exempt form; we send the CSRF header, so use the plain name
+    # (process memory only; tools\.env.local is not touched).
+    if ($env:HOLOLENS_USER -like 'auto-*') { $env:HOLOLENS_USER = $env:HOLOLENS_USER.Substring(5) }
+    $base = Get-DPBase; $nc = (Get-DPCredential).GetNetworkCredential()
+    $basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($nc.UserName + ':' + $nc.Password))
+    $null = Invoke-WebRequest -Uri "$base/" -Headers @{ Authorization = "Basic $basic" } -UseBasicParsing `
+        -SessionVariable s -TimeoutSec 15
+    if (-not ($s.Cookies.GetCookies([Uri]"$base/") | Where-Object Name -eq 'CSRF-Token')) {
+        throw 'Device Portal did not hand out a CSRF-Token cookie.'
+    }
+    $script:DPSession = $s
+}
+
 function Deploy-Rest {
-    $null = Invoke-DP -Path '/api/os/info'   # primes session + CSRF cookie
+    Initialize-DPSession
     $old = Find-Installed
     if ($old) {
         try { $null = Invoke-DP -Method DELETE -Path '/api/taskmanager/app' -Query @{ package = (ConvertTo-Hex64 $old.PackageFullName); forcestop = 'yes' } } catch {}
