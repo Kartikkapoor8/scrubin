@@ -3,7 +3,8 @@
 //   node dev/preflight.mjs [--url http://localhost:4747]
 //
 // It never prints an address, a login, a key or a token: only whether each thing is present and working.
-// Run the app first (npm run dev). Exit code 0 when the headset stream is playable.
+// Start the server first (npm start, or npm run dev), and run this before opening the page: the headset serves
+// one live stream at a time. Exit code 0 when the headset stream is playable.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 
@@ -34,7 +35,7 @@ let config;
 try {
   config = (await getJson('/api/config')).body;
 } catch {
-  console.log(`FIX  VIPER Vision is not running at ${base}. Start it: cd vision && npm run dev`);
+  console.log(`FIX  VIPER Vision is not running at ${base}. Start it: cd vision && npm start`);
   process.exit(2);
 }
 line('ok', 'VIPER Vision is running');

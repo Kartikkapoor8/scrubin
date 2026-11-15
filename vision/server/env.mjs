@@ -76,6 +76,8 @@ export function parseHeadsetAddress(address, schemeSetting = '', portSetting = '
     host = host.slice(prefix[0].length);
   }
   host = host.replace(/[/?#].*$/, '');
+  // The template's placeholder (192.168.137.xxx) or anything that is not a host name or address: not set yet.
+  if (/(^|\.)x{2,}($|\.)/i.test(host) || !/^[A-Za-z0-9.:\[\]-]+$/.test(host)) host = '';
   let port = Number(portSetting) || 0;
   const withPort = host.match(/^([^:\[\]]+):(\d+)$/);
   if (withPort) {

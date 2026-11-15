@@ -188,7 +188,9 @@ export function createRelay(getHeadset, recorder = null) {
         : err.message === 'certificate_mismatch' ? 'The headset certificate does not match the pinned one.'
         : ['ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH', 'EHOSTDOWN', 'ETIMEDOUT', 'ECONNRESET'].includes(err.code)
           ? 'The headset is not answering on the network'
-          : 'The headset could not be reached';
+          : err.code === 'ENOTFOUND' || err.code === 'EAI_AGAIN'
+            ? 'The headset address in vision/.env.local is not valid: check HOLOLENS_IP'
+            : 'The headset could not be reached';
       console.warn(`[relay] headset not reached: ${err.code || err.message}`);
       finished = true;
       clearTimeout(stallTimer);

@@ -156,7 +156,7 @@ if (DEV) {
 // Usually an earlier VIPER Vision (often a forgotten `npm run dev`) is still running: say so, plainly, and stop.
 const portTaken = () => {
   console.error(`\n  VIPER Vision could not start: port ${config.port} is already in use, most likely by another VIPER Vision.`);
-  console.error(`  Stop that one (Ctrl+C in its terminal, or: kill $(lsof -ti tcp:${config.port})) and start again,`);
+  console.error(`  Stop that one (Ctrl+C in its terminal, or: kill $(lsof -ti tcp:${config.port} -sTCP:LISTEN)) and start again,`);
   console.error(`  or run this one on another port: VISION_PORT=4748 npm start\n`);
   process.exit(1);
 };

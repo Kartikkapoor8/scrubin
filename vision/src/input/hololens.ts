@@ -85,6 +85,13 @@ export class HoloLensSource implements InputSource {
     }
   }
 
+  /** Try again in a few seconds without announcing "reconnecting" (the settings are wrong or missing). */
+  private retryLater(): void {
+    if (this.stopped) return;
+    window.clearTimeout(this.retryTimer);
+    this.retryTimer = window.setTimeout(() => void this.connect(), 3000);
+  }
+
   private scheduleRetry(detail: string): void {
     if (this.stopped) return;
     this.teardown();
@@ -131,7 +138,11 @@ export class HoloLensSource implements InputSource {
       }
       // Not configured or wrong password will not fix themselves: report it and let the operator switch.
       if (!this.everLive && (error === 'not_configured' || error === 'auth')) {
+        // Will not fix itself until the settings change, so say so ('unavailable': an app that chose this
+        // input by itself moves on). Chosen by the operator, look again every 3 s: the server re-reads
+        // vision/.env.local, so a corrected login or address works without anyone pressing anything.
         this.onStatus({ state: 'unavailable', detail });
+        this.retryLater();
         return;
       }
       this.scheduleRetry(detail);
@@ -189,6 +200,7 @@ export class HoloLensSource implements InputSource {
             if (!this.everLive && (probe.error === 'not_configured' || probe.error === 'auth')) {
               this.teardown();
               this.onStatus({ state: 'unavailable', detail });
+              this.retryLater();
             } else {
               this.scheduleRetry(detail);
             }
