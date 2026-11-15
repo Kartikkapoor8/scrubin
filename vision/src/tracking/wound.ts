@@ -73,7 +73,7 @@ export class WoundDetector {
    * how many blobs were not line-like, how many glowed like a hologram, and the winner's colour and how
    * bright it is compared with the skin beside it.
    */
-  lastReport = { blobs: 0, notLine: 0, glowing: 0, hue: 0, saturation: 0, value: 0, contrast: 0 };
+  lastReport = { blobs: 0, notLine: 0, glowing: 0, hue: 0, saturation: 0, value: 0, contrast: 0, window: false };
 
   private canvas = document.createElement('canvas');
   private ctx = this.canvas.getContext('2d', { willReadFrequently: true, alpha: false })!;
@@ -82,6 +82,9 @@ export class WoundDetector {
   private width = 0;
   private height = 0;
   private slowFrames = 0;
+  private frames = 0;
+  /** The last frame found the wound (so the next may look only round it). */
+  private lastFound = false;
 
   /** The colour mask of the last frame, for the debug view: 0 = not marker, 1 = marker, 2 = the chosen blob. */
   get debugMask(): { data: Uint8Array; width: number; height: number } {
@@ -113,7 +116,12 @@ export class WoundDetector {
     return { h, s: s / top.length, v: v / top.length };
   }
 
-  analyze(video: HTMLVideoElement, marker: MarkerSettings, near: { x: number; y: number } | null): WoundObservation {
+  /**
+   * `near`: where the wound was last seen (and how long it is), from the tracker. While it is being tracked,
+   * only a window round it is read back from the GPU and analysed (reading the whole frame was most of this
+   * function's cost); the whole frame is still looked at every 15th frame, and whenever the window loses it.
+   */
+  analyze(video: HTMLVideoElement, marker: MarkerSettings, near: { x: number; y: number; length?: number } | null): WoundObservation {
     const none: WoundObservation = { found: false, cx: 0, cy: 0, angle: 0, length: 0, thickness: 0, quality: 0 };
     const vw = video.videoWidth;
     const vh = video.videoHeight;
@@ -129,11 +137,25 @@ export class WoundDetector {
       this.stack = new Int32Array(w * h);
     }
 
+    // The part of the frame to look at, in analysis pixels: all of it, or a window round the wound.
+    const scale = vw / w;
+    this.frames++;
+    let x0 = 0, y0 = 0, rw = w, rh = h;
+    if (near && near.length && this.lastFound && this.frames % 15 !== 0) {
+      const half = Math.max(90, (near.length / scale) * 1.4);
+      const cx = near.x / scale, cy = near.y / scale;
+      x0 = clamp(Math.floor(cx - half), 0, w - 1);
+      y0 = clamp(Math.floor(cy - half * 0.8), 0, h - 1);
+      rw = clamp(Math.ceil(cx + half), x0 + 1, w) - x0;
+      rh = clamp(Math.ceil(cy + half * 0.8), y0 + 1, h) - y0;
+    }
+    const windowed = rw !== w || rh !== h;
     let data: Uint8ClampedArray;
     try {
-      this.ctx.drawImage(video, 0, 0, w, h);
-      data = this.ctx.getImageData(0, 0, w, h).data;
+      this.ctx.drawImage(video, x0 * scale, y0 * scale, rw * scale, rh * scale, x0, y0, rw, rh);
+      data = this.ctx.getImageData(x0, y0, rw, rh).data;
     } catch {
+      this.lastFound = false;
       return none; // frame not readable yet
     }
 
@@ -144,29 +166,32 @@ export class WoundDetector {
     const minSat = marker.minSaturation;
     const minMax = marker.minValue * 255;
     let maskCount = 0;
-    for (let i = 0, p = 0; p < mask.length; i += 4, p++) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      const max = r > g ? (r > b ? r : b) : g > b ? g : b;
-      if (max < minMax) { mask[p] = 0; continue; }
-      const min = r < g ? (r < b ? r : b) : g < b ? g : b;
-      const delta = max - min;
-      if (delta < minSat * max) { mask[p] = 0; continue; }
-      let hh: number;
-      if (max === r) hh = ((g - b) / delta) * 60;
-      else if (max === g) hh = ((b - r) / delta) * 60 + 120;
-      else hh = ((r - g) / delta) * 60 + 240;
-      if (hh < 0) hh += 360;
-      let d = hh - hue;
-      if (d < 0) d = -d;
-      if (d > 180) d = 360 - d;
-      if (d <= tolerance) { mask[p] = 1; maskCount++; } else mask[p] = 0;
+    if (windowed) mask.fill(0);
+    for (let yy = 0; yy < rh; yy++) {
+      let p = (y0 + yy) * w + x0;
+      for (let xx = 0, i = yy * rw * 4; xx < rw; xx++, i += 4, p++) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const max = r > g ? (r > b ? r : b) : g > b ? g : b;
+        if (max < minMax) { mask[p] = 0; continue; }
+        const min = r < g ? (r < b ? r : b) : g < b ? g : b;
+        const delta = max - min;
+        if (delta < minSat * max) { mask[p] = 0; continue; }
+        let hh: number;
+        if (max === r) hh = ((g - b) / delta) * 60;
+        else if (max === g) hh = ((b - r) / delta) * 60 + 120;
+        else hh = ((r - g) / delta) * 60 + 240;
+        if (hh < 0) hh += 360;
+        let d = hh - hue;
+        if (d < 0) d = -d;
+        if (d > 180) d = 360 - d;
+        if (d <= tolerance) { mask[p] = 1; maskCount++; } else mask[p] = 0;
+      }
     }
     this.lastMaskCount = maskCount;
 
     // 2. Connected blobs; score each one by how much it looks like a drawn line.
-    const scale = vw / w;
     const nearX = near ? near.x / scale : 0;
     const nearY = near ? near.y / scale : 0;
     const minPixels = Math.max(10, Math.round((w / 960) * (w / 960) * 26));
@@ -180,10 +205,12 @@ export class WoundDetector {
       hot: number;
     }
     const candidates: Candidate[] = [];
-    const report = { blobs: 0, notLine: 0, glowing: 0, hue: 0, saturation: 0, value: 0, contrast: 0 };
+    const report = { blobs: 0, notLine: 0, glowing: 0, hue: 0, saturation: 0, value: 0, contrast: 0, window: false };
     let cursor = 0; // blobs' pixel indices are kept back to back in `stack`
 
-    for (let seed = 0; seed < mask.length; seed++) {
+    for (let seed = y0 * w + x0, row = 0, col = 0; row < rh; seed++) {
+      if (col === rw) { col = 0; row++; seed += w - rw - 1; continue; }
+      col++;
       if (mask[seed] !== 1) continue;
       const start = cursor;
       let end = cursor;
@@ -195,9 +222,10 @@ export class WoundDetector {
         const x = p % w;
         const y = (p - x) / w;
         n++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
-        const pr = data[p * 4];
-        const pg = data[p * 4 + 1];
-        const pb = data[p * 4 + 2];
+        const di = ((y - y0) * rw + (x - x0)) * 4;
+        const pr = data[di];
+        const pg = data[di + 1];
+        const pb = data[di + 2];
         sr += pr; sg += pg; sb += pb;
         if (pr >= 232 || pg >= 232 || pb >= 232) hot++;
         // 8-connected, and bridging one-pixel gaps so a hologram line crossing the marker does not split it
@@ -265,8 +293,8 @@ export class WoundDetector {
         for (const side of [-1, 1]) {
           const x = Math.round(candidate.mx + dx * ((i / 6) * half) - dy * off * side);
           const y = Math.round(candidate.my + dy * ((i / 6) * half) + dx * off * side);
-          if (x < 0 || y < 0 || x >= w || y >= h) continue;
-          const q = (y * w + x) * 4;
+          if (x < x0 || y < y0 || x >= x0 + rw || y >= y0 + rh) continue;
+          const q = ((y - y0) * rw + (x - x0)) * 4;
           ring += 0.2126 * data[q] + 0.7152 * data[q + 1] + 0.0722 * data[q + 2];
           ringCount++;
         }
@@ -287,7 +315,9 @@ export class WoundDetector {
     }
     this.lastReport = report;
 
+    report.window = windowed;
     if (!best) {
+      this.lastFound = false;
       this.finish(started);
       return none;
     }
@@ -312,6 +342,7 @@ export class WoundDetector {
     const quality = clamp((elongation - 4.5) / 5, 0, 1) * clamp(best.n / (minPixels * 3), 0, 1);
 
     this.finish(started);
+    this.lastFound = length * scale > 14;
     return {
       found: length * scale > 14,
       cx: (best.mx + dx * mid + 0.5) * scale,
@@ -394,8 +425,8 @@ export class WoundTracker {
   }
 
   /** Where to prefer looking next frame, or null if there is nothing to go on. */
-  get hint(): { x: number; y: number } | null {
-    return this.hasPose && this.pose.staleFor < 2.5 ? { x: this.pose.cx, y: this.pose.cy } : null;
+  get hint(): { x: number; y: number; length: number } | null {
+    return this.hasPose && this.pose.staleFor < 2.5 ? { x: this.pose.cx, y: this.pose.cy, length: this.pose.length } : null;
   }
 
   update(observation: WoundObservation, marker: MarkerSettings, dt: number): void {
