@@ -204,7 +204,9 @@ for (let q = 0; q < QUESTIONS.length; q++) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
       await page.screenshot({ path: file });
     }
-    if (log.turns > 0 && Date.now() - started > pcm.length / 32 + 1500) break;
+    // Done when a turn has ended and Gemini has stopped: it ends one turn after its tool calls and speaks in the next.
+    const settled = await page.evaluate(() => window.__viper.brain.state === 'listening' && !window.__viper.brain.speaking);
+    if (log.turns > 0 && settled && Date.now() - started > pcm.length / 32 + 2500) break;
   }
   await page.waitForTimeout(1200);
   const card = await page.evaluate(() => ({
@@ -253,6 +255,12 @@ for (let q = 0; q < QUESTIONS.length; q++) {
       };
     }, `Hey Gemini, ${question}?`);
   }
+  // Gemini must have finished the last answer: nothing wakes it while it is thinking or speaking.
+  for (let i = 0; i < 40; i++) {
+    if (await page.evaluate(() => window.__viper.brain.state === 'listening' && !window.__viper.brain.speaking)) break;
+    await page.waitForTimeout(500);
+  }
+  await page.evaluate(() => window.__viper.panel.hide());
   const feed = (texts, final) => page.evaluate(({ texts, final }) => window.__viper.brain.wake.feed(texts, final), { texts, final });
   const talking = () => page.evaluate(() => window.__viper.brain.talking);
 

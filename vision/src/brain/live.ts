@@ -55,6 +55,8 @@ export class AttendingBrain {
    * keeps working beside it. Turn off with ?wake=0.
    */
   wakeEnabled = true;
+  /** Mark the start and end of each question ourselves (?turns=manual), or leave it to Gemini's own voice detection. With the real API (2026-11-15) marked turns were never answered; its own detection answers in under half a second. */
+  markTurns = false;
   readonly wake = new WakeListener({
     onWake: (rest) => {
       if (!this.openFromWake()) { this.wake.endCapture(); return; }
@@ -101,6 +103,9 @@ export class AttendingBrain {
   private talkTimer = 0;
   private answerTimer = 0;
   private pauseTimer = 0;
+  /** Tool calls were just answered: the spoken answer is still to come. */
+  private toolsPending = false;
+  private toolsTimer = 0;
   /** The question as the browser's own recogniser hears it, live (shown in preference to Gemini's later transcript). */
   private liveQuestion = '';
 
@@ -421,9 +426,10 @@ export class AttendingBrain {
     this.latched = false;
     const level = this.compat;
     // Marking the start and end of each question ourselves is part of the full setup only.
-    this.manualTurns = level === 0 && this.talkMode === 'push';
+    this.manualTurns = level === 0 && this.talkMode === 'push' && this.markTurns;
     try {
-      const res = await fetch(`/api/gemini-token${level >= 1 ? '?lock=0' : ''}`, { method: 'POST', cache: 'no-store' });
+      // A token locked to the model also froze the session's setup: our instructions and tools were ignored.
+      const res = await fetch('/api/gemini-token?lock=0', { method: 'POST', cache: 'no-store' });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (body.error === 'not_configured') {
@@ -549,7 +555,8 @@ export class AttendingBrain {
   private flushState(): void {
     if (!this.pendingState || !this.session) return;
     try {
-      this.session.sendRealtimeInput({ text: this.pendingState });
+      // As context, not as something said: the turn is left open, so the model has nothing to answer.
+      this.session.sendClientContent({ turns: [{ role: 'user', parts: [{ text: this.pendingState }] }], turnComplete: false });
       this.lastStateSent = this.pendingState;
     } catch { /* socket closing; the next connect sends it */ }
     this.pendingState = '';
@@ -682,9 +689,14 @@ export class AttendingBrain {
         const functionResponse: FunctionResponse = { id: call.id, name, response };
         // Tools that only change the screen need no spoken follow-up.
         // (A refusal is different: the model should say why it did not happen.)
-        if (this.compat === 0 && SILENT_TOOLS.has(name) && !response.error) (functionResponse as { scheduling?: string }).scheduling = 'SILENT';
+        // No 'SILENT' scheduling: with the real API (2026-11-15) the model calls its tools first and only
+        // speaks once they are answered, so a silent reply left every answer unspoken.
+        void SILENT_TOOLS;
         responses.push(functionResponse);
       }
+      this.toolsPending = true;
+      window.clearTimeout(this.toolsTimer);
+      this.toolsTimer = window.setTimeout(() => { if (this.toolsPending) { this.toolsPending = false; this.endTurn(); } }, 6000);
       try {
         this.session?.sendToolResponse({ functionResponses: responses });
       } catch (err) {
@@ -705,7 +717,12 @@ export class AttendingBrain {
       void this.connect();
     }
 
-    if (content?.turnComplete) this.endTurn();
+    if (content?.turnComplete) {
+      // The model calls its tools, ends that turn, and then speaks in a second one once they are answered:
+      // the question is not over until that one ends.
+      if (this.toolsPending) this.toolsPending = false;
+      else this.endTurn();
+    }
   }
 
   /** Say on the panel what Gemini just did to the screen. */

@@ -268,6 +268,7 @@ async function boot(): Promise<void> {
   });
   if (params.get('voice') === '0') brain.voice = false;
   if (params.get('wake') === '0') brain.wakeEnabled = false;
+  if (params.get('turns') === 'manual') brain.markTurns = true;
   if (params.get('talk') === 'open') brain.talkMode = 'open';
   // For recordings and screenshots with no Gemini session: show the panel as it looks when one is up.
   if (params.get('panel') === '1') {

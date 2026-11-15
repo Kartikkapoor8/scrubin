@@ -112,6 +112,15 @@ export class WakeListener {
    * (one string per result so far, and whether the last one is final).
    */
   feed(texts: string[], lastIsFinal: boolean): void {
+    // The real recogniser steps aside for the test (its results would be mixed with these), and only the
+    // last result given counts as new.
+    if (this.recognition) {
+      this.wanted = false;
+      const real = this.recognition;
+      this.recognition = null;
+      try { real.abort(); } catch { /* not running */ }
+    }
+    this.consumedUpTo = Math.min(this.consumedUpTo, texts.length - 2);
     this.setState('listening'); // results only ever come from a running recogniser
     this.take(texts.map((text, i) => ({ text, final: i < texts.length - 1 || lastIsFinal })));
   }
