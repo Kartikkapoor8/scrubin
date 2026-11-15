@@ -179,10 +179,9 @@ export class AttendingBrain {
 
   /** The question's words so far, from the browser's recogniser. */
   private heard(text: string): void {
-    if (!this.gateOpen) return;
+    if (!this.gateOpen || !text) return;
     window.clearTimeout(this.pauseTimer);
     this.heardAt = performance.now();
-    if (!text) return;
     this.liveQuestion = text;
     this.card.wake('listening', text);
   }
@@ -195,6 +194,11 @@ export class AttendingBrain {
     this.pauseTimer = window.setTimeout(() => {
       if (this.gateOpen && this.latched) this.closeGate();
     }, 450);
+  }
+
+  /** The browser's recogniser is running, so what was said is known in words, not just as loudness. */
+  private wordsKnown(): boolean {
+    return this.wakeEnabled && this.wake.state === 'listening';
   }
 
   /** What the panel invites people to do, given what is working. */
@@ -228,9 +232,12 @@ export class AttendingBrain {
     window.clearInterval(this.talkTimer);
     this.talkTimer = window.setInterval(() => {
       const now = performance.now();
-      if (this.mic.speaking) this.heardAt = now;
+      // While the browser's recogniser is running, "someone spoke" means it heard words; loudness alone
+      // (a noisy hall) does not count. Without it, loudness is all there is to go on.
+      if (!this.wordsKnown() && this.mic.speaking) this.heardAt = now;
       const tooLong = now - this.talkStartedAt > 15000;
-      const finished = this.latched && this.heardAt > 0 && now - this.heardAt > 1600;
+      const quietFor = this.wordsKnown() ? 2600 : 1600;
+      const finished = this.latched && this.heardAt > 0 && now - this.heardAt > quietFor;
       const nobodySpoke = this.latched && this.heardAt === 0 && now - this.talkStartedAt > 6000;
       if (nobodySpoke) this.closeGate(true);
       else if (tooLong || finished) this.closeGate();

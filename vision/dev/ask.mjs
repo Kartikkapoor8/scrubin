@@ -258,7 +258,33 @@ for (let q = 0; q < QUESTIONS.length; q++) {
 
   await feed(['so this panel is gemini'], true);
   check(!(await talking()), 'talk about Gemini does not open a question');
-  await feed(['so this panel is gemini', 'hey gemini'], false);
+
+  // The phrase with nothing after it (said in passing, or misheard): the panel listens, then goes back to
+  // Ready by itself, without ever saying it is thinking.
+  if (dry) await page.evaluate(() => { window.__reply = null; });
+  await feed(['so this panel is gemini', 'hey gemini'], true);
+  const listened = await page.evaluate(() => document.querySelector('.gem')?.dataset.state);
+  let sawThinking = false;
+  for (let i = 0; i < 16 && (await talking()); i++) {
+    await page.waitForTimeout(500);
+    if ((await page.evaluate(() => document.querySelector('.gem')?.dataset.state)) === 'thinking') sawThinking = true;
+  }
+  await page.waitForTimeout(400);
+  const after = await page.evaluate(() => ({ panel: document.querySelector('.gem')?.dataset.state, brain: window.__viper.brain.state }));
+  check(listened === 'listening' && !sawThinking && after.panel === 'idle' && after.brain === 'listening',
+    'the wake phrase alone listens, then returns to Ready quietly', `${listened} -> ${after.panel} (session ${after.brain})`);
+  if (dry) {
+    await page.evaluate((heard) => {
+      window.__reply = () => {
+        const brain = window.__viper.brain;
+        brain.handleMessage({ serverContent: { inputTranscription: { text: heard } } });
+        brain.handleMessage({ serverContent: { outputTranscription: { text: 'Five, eight millimetres apart.' } } });
+        brain.handleMessage({ serverContent: { turnComplete: true } });
+      };
+    }, `Hey Gemini, ${question}?`);
+  }
+
+  await feed(['so this panel is gemini', 'hey gemini', 'hey gemini'], false);
   check(await talking(), 'the wake phrase opens a question');
 
   const chunkBytes = 16000 * 2 * 0.1;
@@ -268,14 +294,14 @@ for (let q = 0; q < QUESTIONS.length; q++) {
     await page.evaluate((data) => window.__viper.brain.injectSpeech(data), pcm.subarray(off, Math.min(pcm.length, off + chunkBytes)).toString('base64'));
     if (n % 4 === 3) {
       const said = words.slice(0, Math.max(1, Math.round((off / pcm.length) * words.length))).join(' ');
-      await feed(['so this panel is gemini', `hey gemini ${said}`], false);
+      await feed(['so this panel is gemini', 'hey gemini', `hey gemini ${said}`], false);
     }
     const due = started + (n + 1) * 100;
     if (due > Date.now()) await page.waitForTimeout(due - Date.now());
   }
   const live = await page.evaluate(() => document.querySelector('.gem__q')?.textContent || '');
   check(live.length > 4 && !/gemini/i.test(live), 'the question shows as it is spoken, without the wake phrase', live);
-  await feed(['so this panel is gemini', `hey gemini ${question}`], true);
+  await feed(['so this panel is gemini', 'hey gemini', `hey gemini ${question}`], true);
   await page.waitForTimeout(900);
   check(!(await talking()), 'a pause ends the question');
   await page.evaluate(() => window.__viper.brain.injectSpeech(''));

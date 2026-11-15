@@ -101,8 +101,10 @@
   width: calc(var(--u) * 48);
   transition: opacity 320ms ease;
 }
-/* The opening title has the top of the picture to itself for a few seconds. */
-.hud--title .gem-slot { opacity: 0; }
+/* The opening title has the top of the picture to itself for a few seconds, and so does the idle screen
+   (a question asked from it brings the working view, and the panel, straight back). */
+.hud--title .gem-slot,
+.hud--attract .gem-slot { opacity: 0; }
 
 .gem {
   padding: calc(var(--u) * 1.5) calc(var(--u) * 2.1) calc(var(--u) * 1.35);

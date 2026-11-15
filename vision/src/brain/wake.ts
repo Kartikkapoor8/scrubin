@@ -112,6 +112,7 @@ export class WakeListener {
    * (one string per result so far, and whether the last one is final).
    */
   feed(texts: string[], lastIsFinal: boolean): void {
+    this.setState('listening'); // results only ever come from a running recogniser
     this.take(texts.map((text, i) => ({ text, final: i < texts.length - 1 || lastIsFinal })));
   }
 

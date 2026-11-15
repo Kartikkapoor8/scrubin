@@ -93,6 +93,9 @@ export class AttendingCard {
 
     this.context = add(this.root, el('div', 'gem__ctx'));
     this.renderHint();
+    // The body follows the height of what is in it, whatever changed it (words arriving, fonts loading,
+    // the window being resized).
+    new ResizeObserver(() => this.fit()).observe(this.inner);
   }
 
   /** The session is up (show the panel) or not (take it away). */
@@ -364,8 +367,10 @@ export class AttendingCard {
   private fit(immediate = false): void {
     const height = this.inner.offsetHeight;
     if (height === this.bodyHeight && !immediate) return;
+    // The first measurement, or one taken while the panel is not on screen, is simply set.
+    const jump = immediate || this.bodyHeight < 0 || !this.online;
     this.bodyHeight = height;
-    if (immediate) this.body.style.height = `${height}px`;
+    if (jump) this.body.style.height = `${height}px`;
     else to(this.body, { height });
   }
 
