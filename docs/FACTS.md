@@ -32,7 +32,7 @@ Gemini voice attending answering spoken questions. Simulated training on a model
   - What is measured and what is scripted: the wound's position, direction and on-screen length are tracked
     live from the marker line; the 42 mm shown is the marker's known length, which turns pixels into
     millimetres. Each suture is placed when the operator presses Next (key, clicker or phone); nothing
-    detects the stitch itself, and Gemini's tools only move the procedure along. The spacing and depth shown
+    detects the stitch itself. Gemini's tools move between steps; they refuse to skip or place sutures. The spacing and depth shown
     after each suture and on the debrief are the plan's scripted values; the suture count and the time are
     real.
   - Gemini attending: Gemini Live (`gemini-3.8-live`, Google's default Live model as of 2026-11-14) opened from
@@ -86,8 +86,8 @@ commits (`git rev-list --count HEAD` for the final number).
 | Gemini unreachable or key rejected | demo unaffected | Procedure and sutures carry on; the attending retries |
 | Page reload, picture back | about 0.3 s, settings kept | Mid-run reload on the mock |
 | 30 resets in a row, then a full run | passes; page elements flat across the resets, 14 to 19 more after the full run | `node vision/dev/drills.mjs --only resets`; the full run took 53 s |
-| 90 minutes of continuous runs | passes: 96 full runs, no errors; page elements flat (374); JS heap between 20 and 45 MB with no upward trend; Chrome memory 1.35 GB at the start, 1.07 GB at the end; 60 fps throughout | `node vision/dev/drills.mjs --soak 90`, headless Chrome, fake headset, build of 03:18 (the first UI pass); a 60-minute repeat on the final look was running at 05:10 |
-| Frame rate through a full run, final look | 60 fps in every step; 0 slow frames in 3,429 (worst 16.8 ms, no long animation frames) | `node vision/dev/profile.mjs`, 1920x1080 at 2x, mock headset input, Gemini panel shown, production build, headless Chrome on the Mac. Before the night's fixes: 25 slow frames (0.8%), worst 183 ms |
+| 90 minutes of continuous runs | passes: 96 full runs, no errors; page elements flat (374); JS heap between 20 and 45 MB with no upward trend; Chrome memory 1.35 GB at the start, 1.07 GB at the end; 60 fps throughout | `node vision/dev/drills.mjs --soak 90`, headless Chrome, fake headset, build of 03:18 (the first UI pass). A repeat on the final look ran 21 minutes clean (60 fps, flat memory) until the Mac, on battery, reached 20% and Chrome's Energy Saver capped pages at 30 fps; it was stopped to save the battery |
+| Frame rate through a full run, final build | 60 fps in every step; 0 slow frames in 3,433 (worst 16.8 ms, no long animation frames) | `node vision/dev/profile.mjs`, 1920x1080 at 2x, mock headset input, Gemini panel shown, production build, headless Chrome on the Mac. Before the night's fixes: 25 slow frames (0.8%), worst 183 ms |
 | Wound analysis per video frame | about 1 ms (was about 4 ms) | Same run; only a window round the tracked wound is read back from the GPU |
 
 Not measured on real hardware yet: the HoloLens stream delay, wound tracking and hands on real headset
