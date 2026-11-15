@@ -11,10 +11,11 @@ const STATE_TEXT: Record<AttendingState, string> = {
 };
 
 type RGB = [number, number, number];
-// Green while it is hearing you; otherwise the brand's cyan (amber is kept for caution).
+// The brand's cyan in every state (green, amber and red mean good, caution and danger); a little whiter
+// while it is hearing you.
 const WAVE_COLOUR: Record<AttendingState, RGB> = {
   idle: [63, 224, 255],
-  listening: [77, 255, 176],
+  listening: [150, 238, 255],
   thinking: [63, 224, 255],
   answering: [63, 224, 255],
 };

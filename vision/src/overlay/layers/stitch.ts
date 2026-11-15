@@ -2,7 +2,7 @@ import type { Scene } from '../../app/scene';
 import { clamp, ease, lerp, pop, progress } from '../../core/dom';
 import { PROCEDURE, sutureOffsetMm } from '../../procedure/data';
 import { STITCH_SECONDS } from '../../procedure/machine';
-import { C, check, circle, dot, glow, mix, polyline, quantity, type RGB } from '../draw';
+import { C, circle, dot, glow, mix, polyline, quantity, type RGB } from '../draw';
 import type { Frame, Layer } from '../renderer';
 import { WoundSpace } from '../space';
 
@@ -47,13 +47,11 @@ export class StitchLayer implements Layer {
     const px = w.scale;
     const conf = pose.confidence;
 
-    // Check marks over the sutures already placed, and the burst for the latest.
+    // The burst for the latest suture and the measured gaps between the ones placed. (A placed suture is
+    // already green, thread, knot and number: it needs no tick of its own.)
     for (let i = 0; i < Math.min(procedure.stitchesDone, count); i++) {
       const along = sutureOffsetMm(i);
       const since = this.doneAt[i] === undefined ? 10 : t - this.doneAt[i];
-      // Beside the suture's number on the near side: the far side belongs to the danger zone.
-      const [kx, ky] = w.point(along + 4, -(biteMm + 4.6));
-      check(ctx, kx, ky, clamp(1.9 * px, 8, 14), C.green, conf, ease.outCubic(progress(since, 0.1, 0.4)));
       if (since < 0.9) this.burst(frame, w, along, since / 0.9, conf);
       if (i > 0 && step === 'stitch') this.spacing(frame, w, i, since, conf);
     }

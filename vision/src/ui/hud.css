@@ -113,9 +113,15 @@
   padding: calc(var(--u) * 1.5) calc(var(--u) * 2.1) calc(var(--u) * 1.35);
   will-change: transform, opacity;
 }
-/* Green while it is hearing you (good: go ahead); otherwise the brand's cyan. Amber is kept for caution. */
-.gem[data-state='listening'] { --accent: var(--green); --accent-rgb: var(--green-rgb); }
-.gem[data-state='listening'],
+/* Every state is the brand's cyan: green, amber and red are kept for good, caution and danger. Listening
+   is told apart by light, not by colour: a brighter edge and a stronger glow. */
+.gem[data-state='listening'] {
+  border-color: rgba(190, 244, 255, 0.85);
+  box-shadow:
+    0 calc(var(--u) * 1.4) calc(var(--u) * 4.5) rgba(0, 0, 0, 0.42),
+    0 0 calc(var(--u) * 6) rgba(var(--accent-rgb), 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
 .gem[data-state='thinking'],
 .gem[data-state='answering'] {
   box-shadow:
@@ -188,14 +194,14 @@
   color: rgba(255, 255, 255, 0.74);
 }
 .gem__q--on { display: block; }
-/* While it is being spoken, the question is the main thing on the panel. */
-.gem[data-state='listening'] .gem__q { color: #fff; font-size: var(--t-lg); font-weight: 600; }
+/* While it is being spoken the question is lit; its size and weight never change, so it never re-wraps. */
+.gem[data-state='listening'] .gem__q { color: #fff; }
 /* A cursor after the words so far. It is a character, so it can never be left alone on a new line. */
 .gem[data-state='listening'] .gem__q::after {
   content: '_';
   margin-left: 0.06em;
   font-weight: 700;
-  color: var(--green);
+  color: var(--cyan);
   animation: blink 700ms steps(2, start) infinite;
 }
 
@@ -784,12 +790,10 @@
 .stage--clean .sync-clock,
 .stage--clean .latency-patch { display: none !important; }
 
-/* No word left alone on a last line; titles break evenly. */
+/* No word left alone on a last line; a title that wraps breaks evenly. (Only for text that is meant to
+   wrap: this property turns wrapping on, so it stays off the one-line cards at the bottom.) */
 .rail__line,
 .gem__q,
 .gem__a,
-.gem__hint,
-.fb__line { text-wrap: pretty; }
-.rail__title,
-.debrief__title,
-.idle__pitch { text-wrap: balance; }
+.gem__hint { text-wrap: pretty; }
+.rail__title { text-wrap: balance; }
